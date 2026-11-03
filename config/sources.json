@@ -67,6 +67,45 @@
       "status": "candidate-not-installed",
       "reuse_review": "pending",
       "validation": "not-run"
+    },
+    {
+      "id": "gf180mcu-fossi",
+      "kind": "pdk",
+      "repository": "https://github.com/fossi-foundation/gf180mcu-pdk",
+      "docs": "https://github.com/fossi-foundation/gf180mcu-pdk",
+      "observed_head": "25ed9c64b64b8e1b93cc4d2d5cade4cd82383a9a",
+      "default_branch": "main",
+      "archived": false,
+      "declared_license": "Apache-2.0",
+      "status": "candidate-not-installed",
+      "reuse_review": "pending",
+      "validation": "not-run"
+    },
+    {
+      "id": "open-pdks",
+      "kind": "pdk-builder",
+      "repository": "https://github.com/fossi-foundation/open-pdks",
+      "docs": "https://github.com/fossi-foundation/open-pdks",
+      "observed_head": "55f1ea3069e9b8c79bc703708fc47223f65923dd",
+      "default_branch": "main",
+      "archived": false,
+      "declared_license": "Apache-2.0",
+      "status": "candidate-not-installed",
+      "reuse_review": "pending",
+      "validation": "not-run"
+    },
+    {
+      "id": "ciel",
+      "kind": "pdk-manager",
+      "repository": "https://github.com/fossi-foundation/ciel",
+      "docs": "https://github.com/fossi-foundation/ciel",
+      "observed_head": "d2eb3cf1c43f0f8522e93c537f8fca50781216d5",
+      "default_branch": "main",
+      "archived": false,
+      "declared_license": "Apache-2.0",
+      "status": "candidate-not-installed",
+      "reuse_review": "pending",
+      "validation": "not-run"
     }
   ]
 }
