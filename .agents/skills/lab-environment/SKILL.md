@@ -5,8 +5,11 @@ description: Inspect or set up this chip lab's tools, Python environment, memory
 
 1. Run `uv run --frozen --extra layout chip-lab doctor` from the checkout.
 2. Distinguish Mac installation from cloud testing. Read `docs/setup-macos.md`.
-3. On macOS use `bash scripts/bootstrap-macos.sh` for the native baseline.
-4. For the optional worker use `make worker-build` then `make worker-smoke`.
+3. On macOS use `bash scripts/bootstrap-macos.sh` for the native baseline, or
+   `bash scripts/bootstrap-macos.sh --with-worker` for Docker Desktop plus the
+   complete Linux worker. Docker first-run setup may need completion on the Mac.
+4. For the complete worker use `make worker-build` then `make qualify`.
+   GUI bridge commands and scope are in `docs/bridge.md`.
 5. Record versions, architecture and memory. Executable presence is not PDK
    qualification; check technology/deck/model revisions before actual design runs.
 6. Consult `docs/storage-r2.md` for storage. R2 cannot run verification.

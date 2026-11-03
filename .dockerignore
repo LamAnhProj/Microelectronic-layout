@@ -5,5 +5,13 @@
 !src/**
 !examples/
 !examples/**
+!config/
+!config/*.json
+!bridge/
+!bridge/**
+!knowledge/
+!knowledge/**
+!tests/
+!tests/**
 **/__pycache__/
 **/*.egg-info/

@@ -22,11 +22,16 @@ No second standalone Linux VM is needed.
 
 ```sh
 make worker-build
-make worker-smoke
+make qualify
 ```
 
-The worker contains ngspice, Magic, Netgen LVS and Xschem, without a PDK. It is
-headless, with no schematic GUI or remote desktop. Xschem's interactive macOS
+Alternatively use `bash scripts/bootstrap-macos.sh --with-worker`, which installs
+the official Homebrew `docker-desktop` cask. Complete first-run prompts locally,
+then rerun `make worker-build` and `make qualify` if Docker was not ready yet.
+
+The worker contains ngspice, pinned-source Magic, Netgen LVS, Xschem, KLayout and
+Xvfb, without a PDK. KLayout GUI APIs are tested in hidden-view mode; no remote
+desktop is exposed. Xschem's interactive macOS
 setup is deferred until we choose a PDK and GUI strategy; textual SPICE works now.
 
 The runtime has no network, a read-only root filesystem, dropped capabilities,
@@ -49,6 +54,8 @@ in https://docs.docker.com/desktop/settings-and-maintenance/settings/ .
 
 Testing in the ChatGPT cloud workspace does not install anything on your Mac.
 Run the bootstrap locally and keep the `doctor` output before larger jobs.
+For live KLayout control use `docs/bridge.md`. The socket and agent must run
+on the same machine; a cloud agent cannot directly reach a Mac-local socket.
 
 Python dependencies are locked in `uv.lock`. Homebrew and Debian versions resolve
 at installation/build time. Record tool inventories and image IDs; pin a worker

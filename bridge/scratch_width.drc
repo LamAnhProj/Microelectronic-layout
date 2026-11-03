@@ -1,0 +1,4 @@
+# Synthetic bridge qualification only. This is NOT a foundry DRC deck.
+source($input)
+report("Scratch width qualification", $report)
+input(1, 0).width(0.5).output("scratch_width", "Synthetic minimum width 0.5 um")

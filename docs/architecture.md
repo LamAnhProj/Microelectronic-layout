@@ -23,9 +23,10 @@ flowchart TD
     M --> B
 ```
 
-The bootstrap, file inventory, local search, and two smoke experiments are
-implemented. The mutation branch is a specification for the next milestone.
-No live GUI bridge is installed yet.
+The bootstrap, file inventory, local search, manifest circuit runner, live GUI and
+headless bridge, rectangle edits and separate snapshot saving are implemented.
+See `docs/bridge.md`. The transport uses a private host-local Unix socket; GUI
+database work runs on the Qt main thread. The original source file stays untouched.
 
 - Mac: GUI, sources, small working set, local knowledge index.
 - Linux worker: execution against a materialized local design/PDK snapshot.
@@ -39,7 +40,7 @@ the process name.
 
 ## Evidence contract
 
-Future edit jobs record UUID, operation, exact target, input hash/revision,
+Edit jobs record UUID, operation, exact target, input hash/revision,
 parameters with units, layer map revision, approval state, procedure version,
 before/after evidence, warnings and outputs. Saving is another job. Verification
 reports additionally record deck/model hashes and commands. Missing evidence
@@ -49,7 +50,7 @@ stays unknown. Inspect state before retrying a timeout.
 
 1. Install one pinned tool-compatible PDK subset on a Linux worker.
 2. Validate known-good and deliberately broken cells with its DRC/LVS decks.
-3. Add live target inspection, batch indexing, scratch edits, review, execution
-   without saving, inspection, then separate saving.
+3. Extend the validated scratch bridge with process device generators, vias and
+   connectivity-aware operations only after choosing the PDK.
 4. Verify the saved snapshot and compare post-layout simulation.
 5. Add device placement and routing after the foundational checks work.

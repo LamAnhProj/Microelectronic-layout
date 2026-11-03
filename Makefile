@@ -1,6 +1,6 @@
 PYTHON ?= .venv/bin/python
 
-.PHONY: doctor test index smoke layout-smoke worker-build worker-smoke
+.PHONY: doctor test index smoke layout-smoke worker-build worker-smoke qualify
 doctor:
 	$(PYTHON) -m chip_lab doctor
 test:
@@ -16,3 +16,6 @@ worker-build:
 worker-smoke:
 	mkdir -p runs
 	docker compose run --rm worker
+qualify:
+	mkdir -p runs
+	docker compose run --rm worker qualify --output /results

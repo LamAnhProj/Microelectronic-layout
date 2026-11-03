@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "lessons": [
+    {"topic": "GUI startup", "lesson": "Use -rr to keep the application alive after the macro. Automated tests use -z hidden views to avoid interactive startup tips."},
+    {"topic": "Thread ownership", "lesson": "The socket handler queues work; only the Qt main-thread timer accesses GUI layout objects."},
+    {"topic": "State changes", "lesson": "Inspect again after a manual edit. Geometry/properties fingerprints reject a stale target even when the source file is unchanged."},
+    {"topic": "Saving", "lesson": "Bridge save creates a private new GDS snapshot; it neither overwrites the original nor clears the GUI document's modified state."},
+    {"topic": "Technology", "lesson": "A successful synthetic width-rule test proves tool/report plumbing, not foundry DRC coverage."}
+  ]
+}

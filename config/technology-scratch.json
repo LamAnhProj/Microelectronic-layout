@@ -1,0 +1,7 @@
+{
+  "id": "scratch-only-v1",
+  "fabrication_ready": false,
+  "grid_um": 0.001,
+  "layers": {"M1/drawing": [1, 0]},
+  "note": "Synthetic geometry for bridge qualification; no foundry rule or device mapping."
+}

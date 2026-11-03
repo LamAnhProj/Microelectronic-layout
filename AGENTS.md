@@ -5,7 +5,7 @@ Existing Cadence scripts are reference material and require Virtuoso.
 The lab is for custom analog/mixed-signal layout first.
 
 - Inspect the actual environment and target before an operation.
-- Keep inspection, editing, and saving distinct. Future mutation jobs expose
+- Keep inspection, editing, and saving distinct. Mutation jobs expose
   `--approve-edit`; saves expose `--confirm-save`.
 - Bind operations to exact file, library/cell/view mapping, top cell, process
   revision, units/grid, and input hash. Refuse target mismatches.
@@ -26,4 +26,7 @@ The lab is for custom analog/mixed-signal layout first.
 - No Jira, enterprise orchestration, GPU runtime or bulk PDK install is required.
 
 Checks: `make test`, `make layout-smoke`, and `make smoke` when ngspice exists.
-For a worker-only simulator: `make worker-build` then `make worker-smoke`.
+Complete tools: `make worker-build` then `make qualify`. Read `docs/bridge.md`
+and `docs/agent-workflow.md` for live edits, snapshots and circuit manifests.
+Use existing task authorization for scratch validation; flags are operation
+controls, not a requirement to repeatedly ask the user for chat permission.

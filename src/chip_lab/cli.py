@@ -159,6 +159,11 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('doctor')
     sub.add_parser('sources')
+    p = sub.add_parser('qualify')
+    p.add_argument('--output', type=Path, default=ROOT / 'runs')
+    p = sub.add_parser('run-circuit')
+    p.add_argument('manifest', type=Path)
+    p.add_argument('--output', type=Path, default=ROOT / 'runs')
     for name in ('simulate', 'layout-smoke'):
         p = sub.add_parser(name)
         p.add_argument('--output', type=Path, default=ROOT / 'runs')
@@ -169,14 +174,53 @@ def main():
         p.add_argument('--database', type=Path, default=ROOT / '.cache/knowledge.sqlite')
         if name == 'search':
             p.add_argument('query')
+    p = sub.add_parser('bridge')
+    commands = p.add_subparsers(dest='bridge_command', required=True)
+    server = commands.add_parser('serve')
+    server.add_argument('--layout', type=Path, required=True)
+    server.add_argument('--cell', required=True)
+    server.add_argument('--technology', type=Path, default=ROOT / 'config/technology-scratch.json')
+    server.add_argument('--output', type=Path)
+    for command in ('inspect', 'index', 'add-rectangle', 'save', 'stop'):
+        client = commands.add_parser(command)
+        client.add_argument('--session', type=Path, required=True)
+        if command in ('index', 'add-rectangle', 'save'):
+            client.add_argument('--target-file', type=Path, required=True)
+        if command == 'add-rectangle':
+            client.add_argument('--layer', required=True)
+            client.add_argument('--box-um', type=float, nargs=4, required=True)
+            client.add_argument('--approve-edit', action='store_true')
+        if command == 'save':
+            client.add_argument('--confirm-save', action='store_true')
     args = parser.parse_args()
     try:
         if args.command == 'doctor': result = doctor()
         elif args.command == 'sources': result = json.loads((ROOT / 'config/sources.json').read_text())
+        elif args.command == 'qualify':
+            from .qualify import qualify
+            result = qualify(args.output)
+        elif args.command == 'run-circuit':
+            from .circuit import run_circuit
+            result = run_circuit(args.manifest, args.output)
         elif args.command == 'simulate': result = simulate(args.output)
         elif args.command == 'layout-smoke': result = layout_smoke(args.output)
         elif args.command == 'inspect': result = inspect_layout(args.file)
         elif args.command == 'index': result = build_index(args.database)
+        elif args.command == 'bridge':
+            from .bridge import call, serve
+            if args.bridge_command == 'serve':
+                serve(args.layout, args.cell, args.technology, args.output or new_run(ROOT / 'runs/bridge'))
+                return
+            target = None
+            if hasattr(args, 'target_file'):
+                previous = json.loads(args.target_file.read_text())
+                target = previous.get('target', previous)
+            params = {}
+            if args.bridge_command == 'add-rectangle':
+                params = {'layer': args.layer, 'box_um': args.box_um, 'approve_edit': args.approve_edit}
+            elif args.bridge_command == 'save':
+                params = {'confirm_save': args.confirm_save}
+            result = call(args.session, args.bridge_command, target, params)
         else: result = search(args.database, args.query)
         emit(result)
         if result.get('status') == 'failed': sys.exit(1)

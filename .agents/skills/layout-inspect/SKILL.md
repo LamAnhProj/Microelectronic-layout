@@ -9,6 +9,9 @@ description: Read a GDS or OASIS file's hierarchy, layers, units and top cells w
 4. Resolve layer/datatype meanings against the exact process mapping.
 5. Distinguish geometry inventory from connectivity or verified device identity.
 
-This command reads a file, not a live editor session. The live bridge is pending.
-Batch future geometry indexes inside the editor. See `docs/architecture.md` and
-`knowledge/layout-judgment.md`. Do not infer nets from names alone.
+For a live session, run `chip-lab bridge inspect --session SESSION` instead.
+Use its target JSON with `chip-lab bridge index --session SESSION --target-file JSON`.
+The editor performs the hierarchy fingerprint and layer counts locally; remote
+object handles are not exposed. Wrong active cells/views and external file changes
+are refused. See `docs/bridge.md` and `knowledge/layout-judgment.md`.
+Do not infer nets from names alone.

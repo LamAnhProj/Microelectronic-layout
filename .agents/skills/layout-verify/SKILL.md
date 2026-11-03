@@ -12,6 +12,9 @@ description: Plan and assess process-specific DRC, LVS and parasitic extraction 
 6. Associate every report with its exact input hash. Missing evidence is unknown.
 7. Pass extracted netlists to `circuit-simulate` for performance comparison.
 
-The worker installs tools only. No PDK/decks are installed or qualified yet; there
-is no universal `make verify` command. Do not invent command-line/deck options.
+Run `make qualify` for the tool scaffold: actual ngspice RC analysis, Magic startup,
+Xschem version, Netgen matching/mismatching fixtures, synthetic KLayout width DRC,
+and live editor bridge regression. Inspect its UUID `qualification.json` and logs.
+The qualification uses synthetic geometry and ideal devices, not a PDK.
+No foundry decks are installed/qualified yet; there is no universal `make verify`.
 Read `knowledge/debug-and-evidence.md` and the chosen PDK's official documentation.

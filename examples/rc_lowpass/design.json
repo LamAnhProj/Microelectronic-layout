@@ -1,0 +1,13 @@
+{
+  "name": "rc-lowpass-bootstrap",
+  "technology": "ideal-components-no-pdk",
+  "netlist": "circuit.spice",
+  "files": ["circuit.spice"],
+  "measurements": {
+    "f_3db": {
+      "expected": 159154.94309189534,
+      "relative_tolerance": 0.01,
+      "unit": "Hz"
+    }
+  }
+}

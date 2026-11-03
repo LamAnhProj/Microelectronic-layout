@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "supported_edits": ["add-rectangle"],
+  "automatic_routing_enabled": false,
+  "device_generation_enabled": false,
+  "technology_source": "explicit reviewed profile; scratch default is synthetic",
+  "require_target_fingerprint": true,
+  "require_finite_on_grid_coordinates": true,
+  "layer_inference_from_names_allowed": false,
+  "separate_snapshot_save": true,
+  "automatic_retry_of_unknown_edit_outcomes": false
+}

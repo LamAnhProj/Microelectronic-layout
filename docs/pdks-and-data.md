@@ -22,11 +22,12 @@ versions and verification coverage before committing to a process. Start with
 one pinned installed subset on a compute worker, then materialize the active
 layout/model subset on the Mac only as needed.
 
-The bootstrap worker is not qualified for these current PDKs. For example, the
-current GF180 open-pdks Magic technology file declares `requires magic-8.3.411`,
-newer than the bootstrap's 8.3.105:
+The worker is not qualified for these current PDKs. For example, the
+current GF180 open-pdks Magic technology file declares `requires magic-8.3.411`:
 https://github.com/fossi-foundation/open-pdks/blob/main/gf180mcu/magic/gf180mcu.tech .
-IHP also documents process-specific model compilation and recommends a recent
+The worker now builds Magic from a pinned source revision, replacing the old
+distribution package. Still test the exact deck/tool combination. IHP documents
+process-specific model compilation and recommends a recent
 Xschem source release. Build/pin compatible tools together with the chosen PDK.
 
 For initial circuit examples, evaluate AnalogGym and ALIGN-public's examples.
