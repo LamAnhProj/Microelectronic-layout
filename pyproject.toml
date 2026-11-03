@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "semiconductor-lab"
+version = "0.1.0"
+description = "A lightweight, evidence-driven personal custom IC lab"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+layout = ["klayout==0.30.12"]
+
+[project.scripts]
+chip-lab = "chip_lab.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

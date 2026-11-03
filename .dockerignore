@@ -1,0 +1,9 @@
+**
+!docker/
+!docker/Dockerfile
+!src/
+!src/**
+!examples/
+!examples/**
+**/__pycache__/
+**/*.egg-info/

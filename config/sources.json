@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "checked_date": "2026-11-03",
+  "note": "Observed source metadata only; not an installation lock, license clearance, or verified dataset. Recheck before use.",
+  "sources": [
+    {
+      "id": "sky130",
+      "kind": "pdk",
+      "repository": "https://github.com/google/skywater-pdk",
+      "docs": "https://skywater-pdk.readthedocs.io/",
+      "observed_head": "7198cf647113f56041e02abf3eb623692820c5e1",
+      "default_branch": "main",
+      "archived": false,
+      "declared_license": "Apache-2.0",
+      "status": "candidate-not-installed",
+      "reuse_review": "pending",
+      "validation": "not-run"
+    },
+    {
+      "id": "gf180mcu",
+      "kind": "pdk",
+      "repository": "https://github.com/google/gf180mcu-pdk",
+      "docs": "https://gf180mcu-pdk.readthedocs.io/",
+      "observed_head": "de3240d7529a6970437ac3344820aaae7839f215",
+      "default_branch": "main",
+      "archived": true,
+      "declared_license": "Apache-2.0",
+      "status": "candidate-not-installed",
+      "reuse_review": "pending",
+      "validation": "not-run"
+    },
+    {
+      "id": "ihp-sg13g2",
+      "kind": "pdk",
+      "repository": "https://github.com/IHP-GmbH/IHP-Open-PDK",
+      "docs": "https://ihp-open-pdk-docs.readthedocs.io/",
+      "observed_head": "5e6d592e4002946a4616f798c357f0f3c06cf3b6",
+      "default_branch": "main",
+      "archived": false,
+      "declared_license": "Apache-2.0",
+      "status": "candidate-not-installed",
+      "reuse_review": "pending",
+      "validation": "not-run"
+    },
+    {
+      "id": "analoggym",
+      "kind": "circuit-benchmark",
+      "repository": "https://github.com/CODA-Team/AnalogGym",
+      "docs": "https://github.com/CODA-Team/AnalogGym",
+      "observed_head": "0a9d1390ade361e2b4a2d33181e22367edbb8afc",
+      "default_branch": "main",
+      "archived": false,
+      "declared_license": "BSD-3-Clause",
+      "status": "candidate-not-installed",
+      "reuse_review": "pending",
+      "validation": "not-run"
+    },
+    {
+      "id": "align-examples",
+      "kind": "circuit-examples",
+      "repository": "https://github.com/ALIGN-analoglayout/ALIGN-public",
+      "docs": "https://github.com/ALIGN-analoglayout/ALIGN-public",
+      "observed_head": "8d3cc2e9aa5511315203eb5cbfd00d2c88fdbd18",
+      "default_branch": "master",
+      "archived": false,
+      "declared_license": "BSD-3-Clause",
+      "status": "candidate-not-installed",
+      "reuse_review": "pending",
+      "validation": "not-run"
+    }
+  ]
+}

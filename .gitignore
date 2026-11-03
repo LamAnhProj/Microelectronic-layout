@@ -5,3 +5,28 @@
 
 # ignore vim files
 .*.swp
+
+# Personal lab generated files and private configuration
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.env
+.env.*
+!.env.example
+config/*.local.*
+data/
+pdks/
+runs/
+artifacts/
+.cache/
+dist/
+build/
+*.raw
+*.gds
+*.oas
+*.sqlite*
+*.pem
+*.key
+credentials*
+*.log

@@ -1,0 +1,18 @@
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: semiconductor-lab-worker:local
+    user: "${LAB_UID:-1000}:${LAB_GID:-1000}"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 1g
+    cpus: 1.0
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=128m,mode=1777
+    volumes:
+      - ./runs:/results

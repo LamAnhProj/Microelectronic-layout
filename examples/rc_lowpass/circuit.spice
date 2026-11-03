@@ -1,0 +1,8 @@
+RC lowpass bootstrap: no PDK required
+Vin in 0 DC 0 AC 1
+R1 in out 1k
+C1 out 0 1n
+.ac dec 100 1k 100Meg
+.measure ac f_3db WHEN vm(out)=0.7071067811865476 FALL=1
+.print ac vm(out)
+.end
