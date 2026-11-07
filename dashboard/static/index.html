@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Chip Lab · Circuit Evidence</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Main navigation">
+      <div class="brand"><div class="brand-mark">◈</div><div><strong>CHIP LAB</strong><span>LOCAL WORKBENCH</span></div></div>
+      <div class="sidebar-label">WORKSPACE</div>
+      <nav id="nav">
+        <button class="nav-item active" data-view="overview"><span>◫</span> Overview</button>
+        <button class="nav-item" data-view="waveforms"><span>〰</span> Waveforms</button>
+        <button class="nav-item" data-view="schematic"><span>⌁</span> Schematic</button>
+        <button class="nav-item" data-view="layout"><span>▦</span> Layout</button>
+        <button class="nav-item" data-view="verification"><span>◇</span> DRC / LVS</button>
+        <button class="nav-item" data-view="documents"><span>▤</span> Documents</button>
+        <button class="nav-item" data-view="experiments"><span>◉</span> Test circuit</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="system-row"><span class="live-dot"></span> LOCAL MAC SESSION</div>
+        <p>PDKs and run bundles stay on this computer. Worker simulations run offline.</p>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="breadcrumbs">LAB <span>/</span> <b id="view-crumb">OVERVIEW</b></div>
+        <div class="top-controls">
+          <label class="select-wrap">PROCESS <select id="process-select" aria-label="Process"></select></label>
+          <label class="select-wrap">RUN <select id="run-select" aria-label="Validation run"></select></label>
+          <span class="host-pill">● 127.0.0.1</span>
+        </div>
+      </header>
+      <main>
+        <div id="notice" class="notice" role="status" hidden></div>
+
+        <section class="view active" id="view-overview">
+          <div class="page-heading"><div><div class="eyebrow">CIRCUIT EVIDENCE / 01</div><h1>One circuit. Every layer of proof.</h1><p>Trace the inverter from model and schematic through layout, extraction, verification and measured simulation.</p></div><button id="rerun-button" class="button primary">↻ Run full pipeline</button></div>
+          <div class="hero-grid">
+            <div class="hero-card"><div class="hero-kicker">ACTIVE PROCESS</div><div id="hero-process" class="hero-value">—</div><div id="hero-subtitle" class="hero-subtitle">Loading PDK</div><div class="chip-row"><span class="chip">CMOS inverter</span><span id="hero-corner" class="chip">—</span></div></div>
+            <div class="hero-card"><div class="hero-kicker">RUN STATUS</div><div id="hero-status" class="hero-value">—</div><div id="hero-run" class="hero-subtitle mono">—</div><div class="status-note">Read from the hashed run report</div></div>
+            <div class="hero-card"><div class="hero-kicker">VERIFICATION</div><div id="hero-drc" class="hero-value">—</div><div id="hero-lvs" class="hero-subtitle">—</div><div class="status-note">Native KLayout + worker Netgen</div></div>
+          </div>
+          <div class="section-title"><div><span class="eyebrow">MEASURED RESULTS</span><h2>Electrical behavior</h2></div><button class="text-button" data-goto="waveforms">Explore waveforms →</button></div>
+          <div class="metric-grid" id="metric-grid"></div>
+          <div class="two-col">
+            <div class="panel"><div class="panel-heading"><h3>Pipeline checkpoints</h3><span class="small-muted">source → silicon model</span></div><div id="pipeline" class="pipeline"></div></div>
+            <div class="panel"><div class="panel-heading"><h3>Interpretation</h3><span class="small-muted">scope and limits</span></div><div id="interpretation" class="interpretation"></div></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-waveforms">
+          <div class="page-heading compact"><div><div class="eyebrow">TRANSIENT ANALYSIS / 02</div><h1>Waveforms</h1><p>Input and output traces sampled from ngspice. Compare the schematic with capacitance-extracted layout.</p></div><div class="segmented"><button id="wave-schematic" class="selected" data-wave="schematic">Schematic</button><button id="wave-postlayout" data-wave="postlayout">Post-layout</button></div></div>
+          <div class="panel plot-panel"><div class="panel-heading"><h3>V(IN) and V(OUT)</h3><div class="legend"><span><i class="swatch input"></i> Input</span><span><i class="swatch output"></i> Output</span></div></div><div class="plot-wrap"><canvas id="wave-canvas" aria-label="Voltage waveforms over time"></canvas><div id="wave-tooltip" class="plot-tooltip" hidden></div></div><div class="plot-footer"><span id="wave-source">—</span><span>Time in ns · Voltage in V</span></div></div>
+          <div class="two-col"><div class="panel"><div class="panel-heading"><h3>Crossing measurements</h3></div><div id="wave-metrics" class="detail-grid"></div></div><div class="panel"><div class="panel-heading"><h3>Equations in this test</h3></div><div class="formula-list"><div><code>t<sub>PHL</sub> = t(VOUT = VDD/2, falling) − t(VIN = VDD/2, rising)</code></div><div><code>t<sub>PLH</sub> = t(VOUT = VDD/2, rising) − t(VIN = VDD/2, falling)</code></div><div><code>Δt = t<sub>post-layout</sub> − t<sub>schematic</sub></code></div></div></div></div>
+        </section>
+
+        <section class="view" id="view-schematic">
+          <div class="page-heading compact"><div><div class="eyebrow">TOPOLOGY / 03</div><h1>Schematic</h1><p>A two-transistor CMOS inverter with physical source and bulk ties.</p></div></div>
+          <div class="two-col schematic-grid">
+            <div class="panel schematic-panel"><div class="panel-heading"><h3>Connectivity</h3><span class="small-muted">functional diagram</span></div>
+              <svg class="schematic-svg" viewBox="0 0 600 520" role="img" aria-label="CMOS inverter schematic with PMOS, NMOS, input, output and supply">
+                <defs><pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#2c4a5f"/></pattern></defs><rect width="600" height="520" fill="url(#dots)"/>
+                <g class="sch-wire"><path d="M300 55v48 M300 172v138 M300 377v90 M300 252h190 M75 252h110 M185 150v205 M185 150h58 M185 355h58 M358 150h55 V55 H300 M358 355h55 v112 H300"/><circle cx="300" cy="252" r="5"/><circle cx="185" cy="252" r="5"/></g>
+                <g class="sch-device"><rect x="245" y="105" width="112" height="67" rx="8"/><rect x="245" y="310" width="112" height="67" rx="8"/><path d="M280 119v39 M280 324v39 M243 119v39 M243 324v39"/><circle cx="243" cy="130" r="5"/></g>
+                <g class="sch-label"><text x="300" y="41" text-anchor="middle">VDD</text><text x="300" y="493" text-anchor="middle">VSS</text><text x="53" y="257">IN</text><text x="500" y="257">OUT</text><text x="300" y="141" text-anchor="middle">PMOS</text><text x="300" y="346" text-anchor="middle">NMOS</text><text x="355" y="240">C<tspan baseline-shift="sub" font-size="11">L</tspan></text></g>
+                <path class="sch-load" d="M480 252v42m-18 0h36m-36 9h36m-18 0v107"/><path class="sch-wire" d="M480 410h-180"/>
+              </svg>
+            </div>
+            <div class="stack"><div class="panel"><div class="panel-heading"><h3>Device parameters</h3></div><div id="device-params" class="parameter-list"></div></div><div class="panel"><div class="panel-heading"><h3>Reference SPICE</h3><button class="small-button" id="copy-netlist">Copy</button></div><pre id="schematic-code" class="code-block"></pre></div></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-layout">
+          <div class="page-heading compact"><div><div class="eyebrow">GDS GEOMETRY / 04</div><h1>Layout explorer</h1><p>Read-only polygons from the selected run’s actual inverter GDS. Toggle layers, zoom and inspect coordinates.</p></div><button id="fit-layout" class="button secondary">Fit layout</button></div>
+          <div class="layout-grid"><div class="panel layout-panel"><div class="layout-canvas-wrap"><canvas id="layout-canvas" aria-label="GDS layout geometry"></canvas><div class="canvas-hint">Scroll to zoom · drag to pan</div></div><div class="layout-footer"><span id="layout-coordinates">x — µm · y — µm</span><span id="layout-count">—</span></div></div><div class="panel layer-panel"><div class="panel-heading"><h3>Layers</h3><button id="toggle-layers" class="small-button">All / none</button></div><div id="layer-list" class="layer-list"></div><div class="layer-note">Layer colors and names come from the installed PDK display file. Geometry is read from GDS, not redrawn from a mockup.</div></div></div>
+        </section>
+
+        <section class="view" id="view-verification">
+          <div class="page-heading compact"><div><div class="eyebrow">EVIDENCE / 05</div><h1>DRC / LVS results</h1><p>Passing controls and deliberate failures from the process-specific run report.</p></div></div>
+          <div id="verification-cards" class="verification-grid"></div>
+          <div class="two-col"><div class="panel"><div class="panel-heading"><h3>Checks and controls</h3></div><div id="checks-table" class="check-list"></div></div><div class="panel"><div class="panel-heading"><h3>Known limits</h3></div><div id="unresolved-list" class="interpretation"></div></div></div>
+          <div class="panel artifacts-panel"><div class="panel-heading"><h3>Inspect run artifact</h3><span class="small-muted">Source and tool output from this UUID</span></div><div class="artifact-controls"><select id="artifact-select" aria-label="Run artifact"></select><button id="open-artifact" class="small-button">Open</button></div><pre id="artifact-content" class="code-block artifact-code">Select an artifact to inspect its text.</pre></div>
+        </section>
+
+        <section class="view" id="view-documents">
+          <div class="page-heading compact"><div><div class="eyebrow">KNOWLEDGE BASE / 06</div><h1>Documents</h1><p>Local process notes, validation records, workflow references and learning material.</p></div></div>
+          <div class="docs-grid"><div class="panel doc-list" id="doc-list"></div><article class="panel doc-body" id="doc-body"><div class="empty-state">Choose a document from the list.</div></article></div>
+        </section>
+
+        <section class="view" id="view-experiments">
+          <div class="page-heading compact"><div><div class="eyebrow">EXPLORATION / 07</div><h1>Test the circuit</h1><p>Run an exploratory ngspice transient at a selected voltage, load and temperature. Experiments are saved separately from validated runs.</p></div></div>
+          <div class="two-col"><div class="panel"><div class="panel-heading"><h3>Simulation controls</h3><span class="small-muted">3.3 V or 1.8 V device models</span></div><form id="experiment-form" class="experiment-form"><label>Supply voltage <span>V</span><input id="exp-voltage" name="voltage" type="number" step="0.05" required></label><label>Output load <span>fF</span><input id="exp-load" name="load_ff" type="number" min="0.5" max="100" step="0.5" value="5" required></label><label>Temperature <span>°C</span><input id="exp-temp" name="temp_c" type="number" min="-20" max="100" step="1" value="25" required></label><button class="button primary" type="submit">▶ Simulate</button></form><p class="form-note">This is a model experiment. It does not rerun layout, DRC, LVS or extraction.</p></div><div class="panel"><div class="panel-heading"><h3>Experiment result</h3><span id="experiment-status" class="small-muted">Ready to simulate</span></div><div id="experiment-result" class="experiment-result"><div class="empty-state">Adjust a parameter and simulate to see a new trace.</div></div></div></div>
+          <div class="panel plot-panel experiment-plot"><div class="panel-heading"><h3>Experiment waveform</h3><div class="legend"><span><i class="swatch input"></i> Input</span><span><i class="swatch output"></i> Output</span></div></div><div class="plot-wrap"><canvas id="experiment-canvas" aria-label="Exploratory input and output waveforms"></canvas></div><div class="plot-footer"><span id="experiment-id">—</span><span>Time in ns · Voltage in V</span></div></div>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

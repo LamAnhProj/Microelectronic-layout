@@ -1,6 +1,8 @@
 PYTHON ?= .venv/bin/python
 
-.PHONY: doctor test index smoke layout-smoke worker-build worker-smoke qualify
+.PHONY: doctor test index smoke layout-smoke worker-build worker-smoke qualify dashboard
+dashboard:
+	$(PYTHON) dashboard/server.py
 doctor:
 	$(PYTHON) -m chip_lab doctor
 test:

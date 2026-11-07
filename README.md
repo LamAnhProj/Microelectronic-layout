@@ -55,6 +55,10 @@ for the working editor connection and circuit runner.
 
 ## First SKY130A circuit
 
+For a local view of both process runs, waveforms, equations, GDS layers,
+DRC/LVS evidence, documents, and exploratory simulations, run `make dashboard`
+and open <http://127.0.0.1:8765>. See [the dashboard guide](dashboard/README.md).
+
 With the pinned local Volare SKY130A subset and built worker, run
 `python3 examples/sky130_inverter/run.py` on the Mac. It checks a two-transistor
 inverter from SPICE simulation through generated Magic layout, full-area DRC,
