@@ -22,7 +22,8 @@ ngspice, Git, uv, and rclone. It creates a project Python environment with a
 pinned KLayout geometry package, indexes local engineering notes, and runs an RC
 simulation, scratch GDS round trip and headless bridge tests. Add `--with-worker`
 to install Docker Desktop and build/check the full Linux toolchain. Complete any
-Docker first-run setup on your Mac. Full PDKs, datasets and local models are not downloaded.
+Docker first-run setup on your Mac. Bootstrap itself does not download PDKs,
+datasets or local models; the two pinned primitive PDK installs are separate.
 
 ```sh
 uv run --frozen --extra layout chip-lab doctor
@@ -62,6 +63,17 @@ KLayout DRC, and deliberate failing controls. Inputs and generated files are
 hashed in an ignored UUID report under `runs/sky130_inverter/`. See
 [the validation record](docs/validation.md) for measured values and limits.
 
+## GF180MCU D circuit diagnostic
+
+The same Mac now has a pinned GF180MCU primitive subset, with A/B/C/D variants
+available. `python3 examples/gf180_inverter/run.py` checks a real 3.3 V
+inverter simulation and probes the GF180 physical toolchain. Its report is
+`partial`: the default Magic device generators violate metal rules, while
+omitting their gate contacts yields a DRC-clean but disconnected layout. Netgen
+rejects that layout; the native KLayout `metal1` table detects the violations
+after a run-local macOS logger adapter. See the [GF180 experiment](examples/gf180_inverter/README.md)
+and [validation record](docs/validation.md).
+
 ## Implemented
 
 - Environment inventory, including physical RAM and CPU architecture.
@@ -77,7 +89,8 @@ hashed in an ignored UUID report under `runs/sky130_inverter/`. See
 
 `make qualify` exercises the actual Linux tools and live KLayout application.
 The general geometry profile and qualification fixture are synthetic. The
-SKY130A example is an open-PDK circuit check; foundry qualification, full RC
+SKY130A example is an open-PDK circuit check; GF180MCU D physical validation is
+incomplete. Foundry qualification, full RC
 extraction, automatic routing, and fabrication signoff remain future work.
 Existing `.il` files still require Virtuoso.
 No Jira or ticketing is included.

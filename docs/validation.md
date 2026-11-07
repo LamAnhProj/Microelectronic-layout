@@ -71,6 +71,46 @@ This open-PDK circuit check does not qualify a foundry PDK, fabrication signoff,
 an Xschem graphical schematic, a live KLayout edit of this cell, or a remote
 compute path. R2 remains storage only.
 
+## Second process diagnostic — GF180MCU D on Mac, 2026-11-07
+
+Volare installed the `gf180mcu_fd_pr` primitive bundle at open-pdks revision
+`c6d73a35f524070e85faff4a6a9eef49553ebc2b` beside SKY130A. It exposed
+GF180MCU variants A/B/C/D and occupies about 2 GiB. The D variant was selected
+for a 3.3 V CMOS inverter experiment in `examples/gf180_inverter/`. The run
+`runs/gf180_inverter/39b42ea0-fc40-44a0-969e-147910c30e03/report.json`
+was produced on the actual macOS arm64 host and has status `partial`.
+
+- Worker ngspice 44.2 used the vendor `design.ngspice` globals and
+  `sm141064.ngspice` typical models. At 25 °C with a 5 fF load, the schematic
+  simulated at 3.3 V high, 5.4 nV low, 33.25 ps falling and 34.35 ps rising
+  delay. The first run without `design.ngspice` failed on undefined `fnoicor`.
+- Worker Magic 8.3.686 loaded `gf180mcuD` and exported GDS without feedback.
+  Its default 3.3 V NMOS/PMOS generators produced 10 full-area DRC errors.
+  With both gate contacts disabled, the two PCells produced zero Magic errors,
+  but the physical inverter remained disconnected. Magic also printed two
+  `Unknown cif layer` diagnostics (`ndiff_missing_pwell` and
+  `mvndiff_missing_pwell`) while loading the full DRC style; their effect on
+  check coverage needs investigation.
+- Worker Netgen 1.5.327 loaded the pinned GF180 setup and rejected that
+  disconnected layout against the two-device inverter schematic: four nets
+  versus seven connected nets plus one disconnected pin. This is an expected
+  failure, not a passing LVS.
+- Native macOS KLayout 0.30.12 ran the vendor `metal1` rule table against both
+  generated GDS files. The disconnected probe had zero report items; the
+  default PCells had 20. The stock vendor runset failed first because its Ruby
+  logger calls Linux `pmap`; the diagnostic replaced only that logger call
+  with macOS `ps` in a hashed, run-local deck copy. No complete GF180 DRC,
+  antenna, or density pass has been obtained.
+
+The GF180 stage has **no connected DRC-clean layout, passing LVS, extraction or
+post-layout simulation**. A zero-error result on the disconnected probe cannot
+be used as circuit validation. Both PDKs are installed for local learning, but
+neither is a foundry-qualified process package. R2 remains storage only;
+remote compute is unfinished.
+
+The established SKY130A flow was rerun after the GF180 install and passed at
+`runs/sky130_inverter/70ed6e90-de55-4b00-a0cb-92d9d5818ae1/report.json`.
+
 ## Earlier cloud validation — 2026-11-03
 
 Tested on 2026-11-03 in the managed Linux x86_64 workspace, not on the Mac.

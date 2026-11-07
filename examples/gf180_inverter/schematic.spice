@@ -1,0 +1,5 @@
+* Device-level reference for GF180MCU D inverter LVS.
+.subckt inverter OUT IN VSS VDD
+XMN OUT IN VSS VSS nfet_03v3 w=1u l=0.28u
+XMP OUT IN VDD VDD pfet_03v3 w=2u l=0.28u
+.ends inverter

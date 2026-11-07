@@ -1,0 +1,15 @@
+* GF180MCU D 3.3 V CMOS inverter, typical corner at 25 C.
+.include /pdk/gf180mcuD/libs.tech/ngspice/design.ngspice
+.lib /pdk/gf180mcuD/libs.tech/ngspice/sm141064.ngspice typical
+.temp 25
+VDD vdd 0 3.3
+VIN in 0 PULSE(0 3.3 1n 20p 20p 2n 4n)
+XMN out in 0 0 nfet_03v3 w=1u l=0.28u
+XMP out in vdd vdd pfet_03v3 w=2u l=0.28u
+CLOAD out 0 5f
+.tran 2p 12n
+.meas tran vout_high FIND v(out) AT=0.5n
+.meas tran vout_low FIND v(out) AT=2n
+.meas tran tphl TRIG v(in) VAL=1.65 RISE=1 TARG v(out) VAL=1.65 FALL=1
+.meas tran tplh TRIG v(in) VAL=1.65 FALL=1 TARG v(out) VAL=1.65 RISE=1
+.end
