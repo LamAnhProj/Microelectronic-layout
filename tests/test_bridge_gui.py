@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+import sys
 
 from chip_lab.bridge import call, digest
 from chip_lab.cli import ROOT
@@ -16,7 +17,9 @@ class GuiBridgeTests(unittest.TestCase):
     def test_real_editor_inspect_edit_snapshot_and_wrong_cell(self):
         with tempfile.TemporaryDirectory(prefix='chip-gui-') as tmp:
             root = Path(tmp)
-            env = dict(os.environ, LAB_GUI_TEST_OUTPUT=tmp, QT_QPA_PLATFORM='offscreen')
+            env = dict(os.environ, LAB_GUI_TEST_OUTPUT=tmp)
+            if sys.platform != 'darwin':
+                env['QT_QPA_PLATFORM'] = 'offscreen'
             with (root / 'gui.log').open('w+') as log:
                 process = subprocess.Popen(['klayout', '-z', '-nc', '-rx', '-e', '-rr', str(ROOT / 'tests/gui_entry.py')],
                                            env=env, stdout=log, stderr=log)

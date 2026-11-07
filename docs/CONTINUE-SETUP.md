@@ -1,5 +1,20 @@
 # Resume the Mac chip-lab setup
 
+## Mac completion update — 2026-11-07
+
+The current working checkout is `/Users/auslyn/Developer/Microelectronic-layout`
+on macOS 26.5.1 arm64 with 8 GiB RAM. The bundled history was restored and
+pushed normally to GitHub master as `LamAnhProj`. Native tools, the live KLayout
+bridge, all 11 host tests, and all six arm64 Docker worker qualification checks
+passed. See `docs/validation.md` for run IDs, versions, scope and Mac-specific
+fixes. The sections below preserve the pre-installation handoff and earlier
+cloud evidence; their statements that Mac installation is unverified are
+historical.
+
+Next engineering gate: choose a foundry PDK/process variant, model corner,
+device library, rule decks and matching tool versions. R2 remains object
+storage; no bucket, remote compute host or qualified PDK is configured.
+
 The immediate goal is to install and validate the tools on the user's actual
 Mac, configure Git/GitHub, and publish the existing merged repository. Preserve
 existing work and continue implementation rather than starting a new scaffold.

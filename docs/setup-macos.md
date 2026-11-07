@@ -14,6 +14,18 @@ Open KLayout from Applications. Its GUI Python runtime and the project venv are
 distinct. Installing the Python package does not connect to the interactive GUI.
 Do not mix architecture-specific libraries.
 
+On macOS 26.5.1, Homebrew disabled the KLayout cask. The official
+[KLayout download page](https://www.klayout.de/build.html) provides an arm64
+Tahoe 0.30.12 standalone DMG. Verify its published checksum before installing;
+the build tested here is recorded in `docs/validation.md`. The official app has
+an ad hoc signature and macOS may require user approval for Finder launch.
+The direct executable at `/Applications/klayout.app/Contents/MacOS/klayout`
+was used for the bridge tests. Do not disable Gatekeeper system-wide.
+
+`.python-version` pins Python 3.13 for the available KLayout arm64 wheel.
+Unpinned `uv` selected Python 3.15 on this Mac and attempted a large source
+build of the geometry package.
+
 ## Optional Linux worker
 
 Install Docker Desktop only when needed, from
@@ -28,11 +40,16 @@ make qualify
 Alternatively use `bash scripts/bootstrap-macos.sh --with-worker`, which installs
 the official Homebrew `docker-desktop` cask. Complete first-run prompts locally,
 then rerun `make worker-build` and `make qualify` if Docker was not ready yet.
+On the validated Mac, the cask could not create `/usr/local/bin` without an
+interactive `sudo` prompt. Docker's official signed and notarized app was
+installed directly instead, with its CLI linked from `/opt/homebrew/bin`.
 
 The worker contains ngspice, pinned-source Magic, Netgen LVS, Xschem, KLayout and
 Xvfb, without a PDK. KLayout GUI APIs are tested in hidden-view mode; no remote
 desktop is exposed. Xschem's interactive macOS
 setup is deferred until we choose a PDK and GUI strategy; textual SPICE works now.
+On arm64, Netgen is also built from a pinned upstream revision because the
+Debian package lacked its Tcl library in the first Mac build.
 
 The runtime has no network, a read-only root filesystem, dropped capabilities,
 a process limit, one CPU, a 1-GiB RAM ceiling, and one writable results mount.
