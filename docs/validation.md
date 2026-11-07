@@ -26,8 +26,50 @@ restored and normal-pushed to `LamAnhProj/Microelectronic-layout` master.
   only an ad hoc signature, so normal Finder launch can require user approval
   in macOS Privacy & Security.
 
-These are tool and synthetic-fixture checks. No foundry PDK, device models,
-process decks, or extracted transistor-level circuit has been qualified.
+Those initial setup checks were synthetic. The later SKY130A inverter run below
+adds a transistor-level check; it is not foundry signoff.
+
+## First transistor circuit — Mac and arm64 worker, 2026-11-07
+
+The two-device SKY130A inverter in `examples/sky130_inverter/` uses a Volare
+open-PDK installation pinned to `c6d73a35f524070e85faff4a6a9eef49553ebc2b`.
+This is a local, ignored 214 MiB primitive-library subset; no PDK files are
+committed. `python3 examples/sky130_inverter/run.py` produced the passing
+report `runs/sky130_inverter/2844e3c3-807a-4ba6-8403-d880fa440043/report.json`
+on the actual macOS arm64 host. The runner hashes its source, model trees,
+process decks, worker image, and generated artifacts.
+
+- Worker Magic 8.3.686 loads SKY130A 1.0.532-2-gc6d73a3. The Docker build
+  argument was renamed from `MAGIC_REVISION` to `MAGIC_COMMIT_PIN`: the old name
+  collided with Magic's build variable and falsely compiled the version as
+  8.3.0, below the PDK's 8.3.411 requirement. `make qualify` was rerun after
+  this image change and all six worker checks passed.
+- Full-area Magic `drc(full)` with `drc catchup`: zero errors. A deliberately
+  narrow metal shape yields one error. GDS export: zero feedback entries. The
+  first via layout had eight GDS export errors even while an incorrectly scoped
+  DRC query said zero; both checks are now mandatory.
+- Netgen using the pinned SKY130A setup: unique LVS match, two devices and four
+  nets. A deliberately wrong PFET bulk connection yields a mismatch. Netgen
+  can exit zero for a mismatch, so the final report text is checked.
+- Native macOS KLayout 0.30.12 ran the pinned SKY130A FEOL, BEOL and off-grid
+  deck against the generated GDS: zero report items. This is Mac validation;
+  Magic, Netgen and ngspice ran inside the arm64 Docker VM on that Mac.
+- TT, 25 C, 1.8 V, 5 fF load: schematic simulation gave 19.60 ps falling and
+  23.42 ps rising delay; capacitance-extracted simulation gave 24.91 ps and
+  30.26 ps. These are simulations, not measured silicon or qualified timing.
+
+The extraction used for the reported comparison includes parasitic capacitance
+and device geometry but not distributed wire resistance. An exploratory Magic
+RC run emitted `Cannot open file (UNNAMED).ext` and a SPICE3 netlist with an
+invalid inline `**FLOATING` comment; forcing ngspice output made it simulate,
+but this RC path is not promoted as qualified evidence. The generic
+`run-circuit` manifest passed on the worker but correctly reports
+`pdk_verified: false`, because it hashes declared netlists only. The dedicated
+runner separately fingerprints the local model and deck trees.
+
+This open-PDK circuit check does not qualify a foundry PDK, fabrication signoff,
+an Xschem graphical schematic, a live KLayout edit of this cell, or a remote
+compute path. R2 remains storage only.
 
 ## Earlier cloud validation — 2026-11-03
 

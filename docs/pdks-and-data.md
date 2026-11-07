@@ -2,7 +2,9 @@
 
 The machine-readable registry in `config/sources.json` records observed upstream
 commit IDs, repository license metadata and archive status. These are discovery
-records, not tested toolchain locks. No full PDK or circuit corpus is downloaded.
+records, not tested toolchain locks. A pinned SKY130A primitive-library subset
+is now installed locally under ignored `pdks/volare/`; no circuit corpus or
+other full PDK is downloaded. See `docs/validation.md` for its limited check.
 
 - SKY130: start with its documentation and the current open-pdks/ciel installation
   path, rather than copying the entire source tree onto the Mac.
@@ -22,8 +24,10 @@ versions and verification coverage before committing to a process. Start with
 one pinned installed subset on a compute worker, then materialize the active
 layout/model subset on the Mac only as needed.
 
-The worker is not qualified for these current PDKs. For example, the
-current GF180 open-pdks Magic technology file declares `requires magic-8.3.411`:
+The worker's SKY130A inverter check uses Magic 8.3.686 and one exact Volare
+revision. This does not qualify the worker for other PDKs or a fabrication
+signoff flow. For example, the current GF180 open-pdks Magic technology file
+declares `requires magic-8.3.411`:
 https://github.com/fossi-foundation/open-pdks/blob/main/gf180mcu/magic/gf180mcu.tech .
 The worker now builds Magic from a pinned source revision, replacing the old
 distribution package. Still test the exact deck/tool combination. IHP documents

@@ -1,5 +1,9 @@
 # Resume the Mac chip-lab setup
 
+This file preserves the setup handoff and its Mac completion update. The first
+SKY130A circuit results are in `docs/validation.md`; remaining-work statements
+below describe the state before that circuit run.
+
 ## Mac completion update — 2026-11-07
 
 The current working checkout is `/Users/auslyn/Developer/Microelectronic-layout`

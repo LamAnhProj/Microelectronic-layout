@@ -52,6 +52,16 @@ See [macOS setup](docs/setup-macos.md), [architecture](docs/architecture.md),
 Use the [bridge guide](docs/bridge.md) and [agent workflow](docs/agent-workflow.md)
 for the working editor connection and circuit runner.
 
+## First SKY130A circuit
+
+With the pinned local Volare SKY130A subset and built worker, run
+`python3 examples/sky130_inverter/run.py` on the Mac. It checks a two-transistor
+inverter from SPICE simulation through generated Magic layout, full-area DRC,
+Netgen LVS, capacitance extraction, post-layout simulation, native macOS
+KLayout DRC, and deliberate failing controls. Inputs and generated files are
+hashed in an ignored UUID report under `runs/sky130_inverter/`. See
+[the validation record](docs/validation.md) for measured values and limits.
+
 ## Implemented
 
 - Environment inventory, including physical RAM and CPU architecture.
@@ -66,8 +76,9 @@ for the working editor connection and circuit runner.
 - A source registry for evaluating PDKs and circuit examples before bulk downloads.
 
 `make qualify` exercises the actual Linux tools and live KLayout application.
-The included geometry profile and DRC fixture are synthetic. Foundry PDK setup,
-device generators, routing, and process-qualified DRC/LVS/PEX remain next milestones.
+The general geometry profile and qualification fixture are synthetic. The
+SKY130A example is an open-PDK circuit check; foundry qualification, full RC
+extraction, automatic routing, and fabrication signoff remain future work.
 Existing `.il` files still require Virtuoso.
 No Jira or ticketing is included.
 Python read in gds format file and dump various information (list cell, layer, hierarchy ... )

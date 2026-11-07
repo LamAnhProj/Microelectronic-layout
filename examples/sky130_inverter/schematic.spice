@@ -1,0 +1,5 @@
+* Device-level reference for SKY130A inverter LVS.
+.subckt inverter OUT IN VSS VDD
+XMN OUT IN VSS VSS sky130_fd_pr__nfet_01v8 w=1 l=0.15
+XMP OUT IN VDD VDD sky130_fd_pr__pfet_01v8 w=2 l=0.15
+.ends inverter

@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 FROM debian:trixie-slim AS magic-build
-ARG MAGIC_REVISION=d914f66693e6ce0bd30dc1f2b265c2bcd7b20762
+ARG MAGIC_COMMIT_PIN=56319630d4a304a55e1139fdfe59594ca00bf05c
 RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export GIT_SSL_CAINFO=/run/secrets/proxy_ca; fi; \
     apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates git build-essential m4 csh tcl-dev tk-dev libx11-dev libxext-dev \
       libxrender-dev libglu1-mesa-dev libcairo2-dev libncurses-dev \
     && git clone https://github.com/RTimothyEdwards/magic.git /build/magic \
-    && cd /build/magic && git checkout "$MAGIC_REVISION" \
+    && cd /build/magic && git checkout "$MAGIC_COMMIT_PIN" \
     && ./configure --prefix=/opt/eda && make -j2 && make install
 
 FROM debian:trixie-slim AS netgen-build
