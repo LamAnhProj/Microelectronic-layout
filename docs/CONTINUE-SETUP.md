@@ -2,7 +2,8 @@
 
 This file preserves the setup handoff and its Mac completion update. Later
 SKY130A and GF180MCU D circuit results are in `docs/validation.md`. GF180MCU D
-is installed for local experiments, but its physical inverter flow is partial.
+is installed for local experiments and its open-PDK inverter check passes with
+the stated scope limits.
 Remaining-work statements below describe the earlier setup state.
 
 ## Mac completion update — 2026-11-07

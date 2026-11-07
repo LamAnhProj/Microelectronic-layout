@@ -1,13 +1,13 @@
-"""Diagnose the GF180MCU D inverter path on the native Mac.
+"""Run the GF180MCU D inverter checks on the native Mac.
 
 Usage: python3 examples/gf180_inverter/run.py
-The run intentionally ends as partial until a connected, DRC-clean layout
-matches the reference schematic. Reports remain under ignored runs/.
+Reports and geometry remain under ignored runs/.
 """
 
 from __future__ import annotations
 
 import hashlib
+import glob
 import json
 import os
 from pathlib import Path
@@ -72,16 +72,33 @@ def drc_count(output: str) -> int:
     return int(found[0])
 
 
-def metal1_drc(fixture: str, deck: Path) -> int:
+def klayout_drc(fixture: str, deck: Path, table: str) -> int:
     gds = RUN / fixture / "inverter.gds"
-    report = RUN / fixture / "metal1.lyrdb"
-    command(f"klayout_{fixture}", [str(KLAYOUT), "-b", "-r", str(deck),
+    report = RUN / fixture / f"{table}.lyrdb"
+    command(f"klayout_{fixture}_{table}", [str(KLAYOUT), "-b", "-r", str(deck),
         "-rd", "thr=1", "-rd", "metal_top=11K", "-rd", "mim_option=B",
         "-rd", "metal_level=5LM", "-rd", "feol=true", "-rd", "beol=true",
-        "-rd", "offgrid=true", "-rd", "topcell=inverter", "-rd",
+        "-rd", "offgrid=true", "-rd", "conn_drc=true", "-rd",
+        "density=false", "-rd", "topcell=inverter", "-rd",
         f"input={gds}", "-rd", f"report={report}", "-rd", "run_mode=flat",
-        "-rd", "table_name=metal1"])
+        "-rd", f"table_name={table}"])
     return len(ET.parse(report).getroot().findall(".//item"))
+
+
+def measure(output: str) -> dict[str, float]:
+    values = {}
+    for key in ("vout_high", "vout_low", "tphl", "tplh"):
+        matches = re.findall(rf"^\s*{key}\s*=\s*([+\-\d.eE]+)", output,
+                             re.MULTILINE | re.IGNORECASE)
+        if len(matches) != 1:
+            raise RuntimeError(f"Missing or ambiguous ngspice {key} measurement")
+        values[key] = float(matches[0])
+    if not (3.2 < values["vout_high"] <= 3.3 and
+            0 <= values["vout_low"] < 0.1 and
+            0 < values["tphl"] < 1e-9 and
+            0 < values["tplh"] < 1e-9):
+        raise RuntimeError(f"GF180 inverter simulation failed: {values}")
+    return values
 
 
 def main() -> None:
@@ -95,11 +112,11 @@ def main() -> None:
         "status": "failed", "run": str(RUN), "pdk": "gf180mcuD",
         "pdk_pin": PIN, "host": {"system": platform.system(),
                                    "arch": platform.machine()},
-        "scope": "open-PDK diagnostic; disconnected physical probe is not LVS-clean",
+        "scope": "open-PDK inverter check; no foundry signoff; capacitance extraction only",
         "checks": {}, "unresolved": []}
     try:
         for name in ("inverter.spice", "schematic.spice", "layout.tcl",
-                     "bad_pcell.tcl", "run.py"):
+                     "disconnected_probe.tcl", "bad_pcell.tcl", "run.py"):
             shutil.copyfile(SOURCE / name, RUN / name)
         report["source_sha256"] = {p.name: sha256(p) for p in RUN.iterdir()
                                    if p.is_file() and p.suffix in {".spice", ".tcl", ".py"}}
@@ -111,24 +128,15 @@ def main() -> None:
         }
         report["worker_image"] = command("image", ["docker", "image", "inspect",
             "semiconductor-lab-worker:local", "--format", "{{.Id}}"]).strip()
+        report["native_klayout_version"] = command("klayout_version",
+            [str(KLAYOUT), "-b", "-v"]).strip()
 
         baseline = worker("baseline", "ngspice", "", "-b", "inverter.spice")
-        measures = {}
-        for key in ("vout_high", "vout_low", "tphl", "tplh"):
-            match = re.search(rf"^\s*{key}\s*=\s*([+\-\d.eE]+)", baseline,
-                              re.MULTILINE | re.IGNORECASE)
-            if not match:
-                raise RuntimeError(f"Missing ngspice {key} measurement")
-            measures[key] = float(match[1])
-        if not (3.2 < measures["vout_high"] <= 3.3 and
-                0 <= measures["vout_low"] < 0.1 and
-                0 < measures["tphl"] < 1e-9 and
-                0 < measures["tplh"] < 1e-9):
-            raise RuntimeError(f"GF180 inverter simulation failed: {measures}")
-        report["checks"]["schematic_simulation"] = measures
+        report["checks"]["schematic_simulation"] = measure(baseline)
 
         rc = "/pdk/gf180mcuD/libs.tech/magic/gf180mcuD.magicrc"
-        for fixture, script in (("probe", "layout.tcl"),
+        for fixture, script in (("connected", "layout.tcl"),
+                                ("probe", "disconnected_probe.tcl"),
                                 ("default_pcell", "bad_pcell.tcl")):
             folder = RUN / fixture
             folder.mkdir()
@@ -143,9 +151,14 @@ def main() -> None:
             for artifact in ("inverter.mag", "inverter.gds"):
                 if not (folder / artifact).is_file():
                     raise RuntimeError(f"Missing {fixture}/{artifact}")
-        if report["checks"]["magic_probe_drc_errors"] != 0 or \
+        if report["checks"]["magic_connected_drc_errors"] != 0 or \
+                report["checks"]["magic_probe_drc_errors"] != 0 or \
                 report["checks"]["magic_default_pcell_drc_errors"] <= 0:
             raise RuntimeError("PCell DRC diagnostic no longer matches expectations")
+
+        for artifact in ("inverter_lvs.spice", "inverter_pex.spice"):
+            if not (RUN / "connected" / artifact).is_file():
+                raise RuntimeError(f"Missing connected/{artifact}")
 
         lvs = worker("lvs_probe", "netgen", "probe", "-batch", "lvs",
             "schematic.spice inverter", "inverter_lvs.spice inverter",
@@ -154,37 +167,85 @@ def main() -> None:
             raise RuntimeError("Disconnected physical probe was not rejected by LVS")
         report["checks"]["probe_lvs"] = "mismatch: disconnected ports and nets"
 
+        lvs = worker("lvs_connected", "netgen", "connected", "-batch", "lvs",
+            "schematic.spice inverter", "inverter_lvs.spice inverter",
+            "/pdk/gf180mcuD/libs.tech/netgen/gf180mcuD_setup.tcl", "lvs_report.txt")
+        if not re.search(r"Final result:\s*Circuits match uniquely\.", lvs):
+            raise RuntimeError("Connected GF180 inverter LVS did not match uniquely")
+        report["checks"]["connected_lvs"] = "unique match, 2 devices, 4 nets"
+
+        baseline_spice = (RUN / "inverter.spice").read_text()
+        expected_devices = ("XMN out in 0 0 nfet_03v3 w=1u l=0.28u\n"
+                            "XMP out in vdd vdd pfet_03v3 w=2u l=0.28u")
+        if baseline_spice.count(expected_devices) != 1:
+            raise RuntimeError("Post-layout testbench device substitution failed")
+        post = baseline_spice.replace(expected_devices, "XINV in out 0 vdd inverter")
+        post = post.replace(".temp 25", ".include inverter_pex.spice\n.temp 25")
+        (RUN / "connected" / "postlayout.spice").write_text(post)
+        extracted = worker("postlayout", "ngspice", "connected", "-b",
+                           "postlayout.spice")
+        report["checks"]["capacitance_extracted_simulation"] = measure(extracted)
+
+        bad_schematic = (RUN / "schematic.spice").read_text().replace(
+            "XMP OUT IN VDD VDD", "XMP OUT IN VDD VSS")
+        if bad_schematic == (RUN / "schematic.spice").read_text():
+            raise RuntimeError("Negative LVS fixture substitution failed")
+        (RUN / "connected" / "schematic_bad.spice").write_text(bad_schematic)
+        bad_lvs = worker("lvs_negative", "netgen", "connected", "-batch", "lvs",
+            "schematic_bad.spice inverter", "inverter_lvs.spice inverter",
+            "/pdk/gf180mcuD/libs.tech/netgen/gf180mcuD_setup.tcl",
+            "lvs_negative_report.txt")
+        if "Top level cell failed pin matching" not in bad_lvs and \
+                "Netlists do not match" not in bad_lvs:
+            raise RuntimeError("Wrong PFET bulk was not rejected by LVS")
+        report["checks"]["negative_lvs"] = "wrong PFET bulk rejected"
+
         # The vendor's Ruby logger calls Linux pmap. Adapt only its logging line
         # in a run-local copy; retain the original rule body and hash both.
         rules = PDK / "libs.tech" / "klayout" / "drc" / "rule_decks"
         deckdir = RUN / "klayout_deck"
         deckdir.mkdir()
         shutil.copyfile(rules / "layers_def.drc", deckdir / "layers_def.drc")
-        deck = deckdir / "metal1.drc"
-        body = "\n".join((rules / name).read_text() for name in
-                         ("main.drc", "metal1.drc", "tail.drc"))
         old = "`pmap #{Process.pid} | tail -1`[10, 40].strip"
-        if body.count(old) != 1:
-            raise RuntimeError("Vendor pmap logger changed; review the Mac adapter")
+        new = "`ps -o rss= -p #{Process.pid}`.strip + ' KiB'"
         report["checks"]["vendor_runset_uses_linux_pmap"] = True
-        deck.write_text(body.replace(old,
-            "`ps -o rss= -p #{Process.pid}`.strip + ' KiB'"))
-        report["mac_deck_adapter_sha256"] = sha256(deck)
+        def prepare_deck(table: str, names: list[str]) -> Path:
+            deck = deckdir / f"{table}.drc"
+            body = "\n".join((rules / name).read_text() for name in
+                             ("main.drc", *names, "tail.drc"))
+            if body.count(old) != 1:
+                raise RuntimeError("Vendor pmap logger changed; review Mac adapter")
+            deck.write_text(body.replace(old, new))
+            report.setdefault("mac_deck_adapter_sha256", {})[table] = sha256(deck)
+            return deck
+
+        metal1_deck = prepare_deck("metal1", ["metal1.drc"])
         for fixture in ("probe", "default_pcell"):
             report["checks"][f"native_klayout_{fixture}_metal1_items"] = \
-                metal1_drc(fixture, deck)
+                klayout_drc(fixture, metal1_deck, "metal1")
         if report["checks"]["native_klayout_default_pcell_metal1_items"] <= 0:
             raise RuntimeError("Native KLayout failed to detect default PCell metal errors")
 
+        excluded = {"antenna.drc", "density.drc", "main.drc",
+                    "layers_def.drc", "tail.drc"}
+        full_tables = [Path(p).name for p in glob.glob(str(rules / "*.drc"))
+                       if Path(p).name not in excluded]
+        full_deck = prepare_deck("main", full_tables)
+        report["checks"]["native_klayout_connected_full_drc_items"] = \
+            klayout_drc("connected", full_deck, "main")
+        if report["checks"]["native_klayout_connected_full_drc_items"] != 0:
+            raise RuntimeError("Native GF180 full DRC found violations")
+
         report["unresolved"] = [
-            "No connected, DRC-clean inverter layout or matching LVS/PEX",
-            "Vendor KLayout DRC requires a macOS logger adapter; only metal1 table was run",
-            "No antenna, density, full DRC, or foundry qualification",
+            "Vendor KLayout DRC requires a macOS logger adapter",
+            "Antenna and density tables were not run on this small cell",
+            "Capacitance extraction excludes distributed wire resistance",
+            "No foundry qualification or silicon measurement",
         ]
-        if report["checks"]["magic_probe_unknown_cif_layers"]:
+        if report["checks"]["magic_connected_unknown_cif_layers"]:
             report["unresolved"].append(
                 "GF180 Magic DRC deck prints unknown CIF layer diagnostics")
-        report["status"] = "partial"
+        report["status"] = "passed"
     except Exception as exc:
         report["error"] = str(exc)
         raise

@@ -63,15 +63,15 @@ KLayout DRC, and deliberate failing controls. Inputs and generated files are
 hashed in an ignored UUID report under `runs/sky130_inverter/`. See
 [the validation record](docs/validation.md) for measured values and limits.
 
-## GF180MCU D circuit diagnostic
+## GF180MCU D circuit
 
 The same Mac now has a pinned GF180MCU primitive subset, with A/B/C/D variants
 available. `python3 examples/gf180_inverter/run.py` checks a real 3.3 V
-inverter simulation and probes the GF180 physical toolchain. Its report is
-`partial`: the default Magic device generators violate metal rules, while
-omitting their gate contacts yields a DRC-clean but disconnected layout. Netgen
-rejects that layout; the native KLayout `metal1` table detects the violations
-after a run-local macOS logger adapter. See the [GF180 experiment](examples/gf180_inverter/README.md)
+inverter through schematic simulation, connected Magic layout, full-area DRC,
+Netgen LVS, capacitance extraction, post-layout simulation, and native macOS
+KLayout full DRC. Negative controls catch the default generator's metal errors
+and a DRC-clean but disconnected layout. The native vendor deck needs a
+run-local macOS logger adapter. See the [GF180 experiment](examples/gf180_inverter/README.md)
 and [validation record](docs/validation.md).
 
 ## Implemented
@@ -89,8 +89,8 @@ and [validation record](docs/validation.md).
 
 `make qualify` exercises the actual Linux tools and live KLayout application.
 The general geometry profile and qualification fixture are synthetic. The
-SKY130A example is an open-PDK circuit check; GF180MCU D physical validation is
-incomplete. Foundry qualification, full RC
+SKY130A and GF180MCU D examples are open-PDK circuit checks. Foundry
+qualification, full RC
 extraction, automatic routing, and fabrication signoff remain future work.
 Existing `.il` files still require Virtuoso.
 No Jira or ticketing is included.

@@ -11,7 +11,8 @@ the process-specific checks.
   path, rather than copying the entire source tree onto the Mac.
 - GF180MCU: the installed Volare/open-pdks primitive bundle exposes variants
   A/B/C/D at revision `c6d73a35f524070e85faff4a6a9eef49553ebc2b`.
-  The circuit diagnostic selects D; its physical flow is still incomplete.
+  The circuit experiment selects D; its inverter checks pass with the limits
+  in `docs/validation.md`.
 - IHP SG13G2: a candidate for analog/mixed-signal/RF work with its own models,
   tools and process requirements. It is not a drop-in substitute for SKY130.
 
@@ -33,8 +34,9 @@ signoff flow. The GF180 open-pdks Magic technology file declares
 https://github.com/fossi-foundation/open-pdks/blob/main/gf180mcu/magic/gf180mcu.tech .
 The worker now builds Magic from a pinned source revision, replacing the old
 distribution package. The installed GF180 D deck loads under Magic 8.3.686,
-but its default transistor generators are not DRC-clean and the native KLayout
-runset's logger needs a macOS adapter. IHP documents
+but its default gate contacts are not DRC-clean. The routed inverter uses a
+separate legal gate contact, while the native KLayout runset's logger needs a
+macOS adapter. IHP documents
 process-specific model compilation and recommends a recent
 Xschem source release. Build/pin compatible tools together with the chosen PDK.
 
