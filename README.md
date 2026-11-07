@@ -7,6 +7,10 @@ open-source lab. Original files in `skill-cadence-scripts/`, `GDS-parser/`, and
 
 ## Start on your Mac
 
+For the complete Mac setup kit, run `bash scripts/setup-git-macos.sh` first to
+restore the bundled Git history, authenticate and publish. See
+[setup handoff](docs/CONTINUE-SETUP.md). A source ZIP alone has no `.git` history.
+
 Clone this repository, open Terminal in its directory, then run:
 
 ```sh

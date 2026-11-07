@@ -19,7 +19,7 @@ if ! command -v brew >/dev/null; then
   exit 1
 fi
 # Default: native tools. Linux EDA tools can be installed with --with-worker.
-brew install git uv ngspice rclone
+brew install git gh uv ngspice rclone
 if [[ ! -d /Applications/klayout.app ]] && ! brew list --cask klayout >/dev/null 2>&1; then
   brew install --cask klayout
 fi

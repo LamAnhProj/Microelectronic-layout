@@ -5,6 +5,13 @@ and the connected GitHub API refused writes with HTTP 403. This is a GitHub
 integration permission issue; chat approval does not grant repository write access.
 The remote branch was not changed.
 
+The latest Mac setup kit includes both the source folder and a sibling
+`Microelectronic-layout.bundle`. Run `bash scripts/setup-git-macos.sh` from the
+source folder. It restores a real checkout, preserves existing identity, uses
+browser GitHub authentication, merges remote changes and pushes without force.
+Default checkout: `~/Developer/Microelectronic-layout`. The full continuation
+prompt is a separate kit file, not repository content.
+
 Option 1: reconnect the GitHub integration with Contents read/write access to
 `LamAnhProj/Microelectronic-layout`, then retry the push from the prepared checkout.
 
