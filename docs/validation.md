@@ -211,3 +211,38 @@ also listed in the UI. These values characterize the extracted network at DC;
 they are not isolated timing penalties. The R-C netlists contain 6.428 fF
 (SKY130) and 5.811 fF (GF180) of top-level capacitors, including internal
 nodes, so a simple C-only versus R-C timing subtraction does not isolate R.
+
+### Shorter inverter layouts and waveform diagnosis, 2026-11-08
+
+The original hashed runs above are the references. The only source change in
+each revision is `layout.tcl`; the worker image, pinned PDK/model/deck hashes,
+testbench, device sizes and extraction script match its reference. GF180's
+PMOS, well tap and upper contacts moved 2 µm toward the NMOS, shortening the
+continuous polysilicon gate. SKY130's PMOS moved 1 µm toward the NMOS and its
+outer metal2 IN/OUT bus spines moved inward while retaining clearance from
+the supply rails. These were geometry changes, not schematic substitutions.
+
+| Process and revised Mac run | RC top-level C, before → after | IN→PMOS gate R, before → after | RC tPHL, before → after | RC tPLH, before → after |
+| --- | ---: | ---: | ---: | ---: |
+| SKY130A `a48fd805-e40e-467e-8076-395e6b3caaae` | 6.42764 → 6.21625 fF | 563.602 → 563.021 Ω | 27.6697 → 27.4270 ps | 34.9329 → 34.6056 ps |
+| GF180MCU D `53c0cbd1-8b41-4346-a913-2c371ad8726e` | 5.81053 → 5.33810 fF | 112.8388 → 77.2290 Ω | 44.9314 → 44.2421 ps | 46.8556 → 45.9978 ps |
+
+Both revised runs passed Magic full DRC, native KLayout full DRC with zero
+items, unique two-device/four-net Netgen LVS, topology-checked detailed R-C
+extraction and ngspice delay/logic acceptance. The Mac dashboard reruns the
+three transient decks with native ngspice and measures 50% delay plus 90–10%
+fall and 10–90% rise slew from the trace samples. Its analysis endpoint
+checks the trace delays against each run's hashed measurements.
+
+The largest extracted capacitor pairs in the original layouts are VDD–VSS,
+IN–VSS and OUT–VSS. The first is supply coupling, not a direct output load.
+The output also sees the common external 5 fF testbench load. In GF180 the
+shorter poly gate reduced both IN-associated extracted capacitance (1.78235
+to 1.49413 fF) and PMOS gate access resistance. In SKY130 the metal2 area
+reduction lowered total extracted capacitance, but the PMOS gate path stayed
+near 563 Ω, so the timing improvement was modest. These correlations support
+the geometry change; the extraction data does not attribute each capacitor
+or resistor to a unique shape or conductor layer. The change from C-only to
+R-C simulation also includes flattening-related capacitance changes, so it
+cannot be labeled a resistance-only delay penalty. These remain nominal
+open-PDK simulations, not silicon measurements or foundry signoff.

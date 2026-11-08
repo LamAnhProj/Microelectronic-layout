@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-const state = {overview:null,process:'sky130',run:null,report:null,view:'overview',waveKind:'schematic',waveSignals:new Set(['in','out']),wave:null,layout:null,rcLayout:null,rcSelection:null,rcShowR:true,rcShowC:false,rcNet:'all',layers:new Set(),doc:null,experiment:null,plot:null,layoutZoom:1,layoutPan:[0,0],drag:null,drc:null,drcLayout:null,drcFocus:null,lvs:null,pex:null,schematic:null,editorExperiment:null,checkpoints:[]};
+const state = {overview:null,process:'sky130',run:null,report:null,view:'overview',waveKind:'schematic',waveSignals:new Set(['in','out']),wave:null,analysis:null,analysisPromise:null,layout:null,rcLayout:null,rcSelection:null,rcShowR:true,rcShowC:false,rcNet:'all',layers:new Set(),doc:null,experiment:null,plot:null,layoutZoom:1,layoutPan:[0,0],drag:null,drc:null,drcLayout:null,drcFocus:null,lvs:null,pex:null,schematic:null,editorExperiment:null,checkpoints:[]};
 
 async function api(path, options={}, retried=false) {
   const response = await fetch(path, options);
@@ -22,7 +22,7 @@ function drcValue(){const c=state.report?.checks||{};return state.process==='sky
 function magicValue(){const c=state.report?.checks||{};return state.process==='sky130'?c.magic_full_drc_errors:c.magic_connected_drc_errors;}
 function lvsValue(){const c=state.report?.checks||{};return state.process==='sky130'?c.lvs:c.connected_lvs;}
 function selectRun(){const options=state.overview.runs[state.process]||[];const select=$('run-select');clear(select);for(const item of options){const opt=add(select,'option',`${item.status.toUpperCase()} · ${item.id.slice(0,8)}`);opt.value=item.id;}const chosen=options.find(item=>item.status==='passed')||options[0];state.run=chosen?.id||null;select.value=state.run||'';}
-async function loadRun(){if(!state.run){state.report=null;notice('No validation runs found for this process.',true);return;}if($('checkpoint-dialog').open)$('checkpoint-dialog').close();state.report=await api(query('/api/run',{process:state.process,run:state.run}));state.wave=null;state.layout=null;state.rcLayout=null;state.rcSelection=null;state.drc=null;state.drcLayout=null;state.lvs=null;state.pex=null;state.schematic=null;state.editorExperiment=null;state.layers.clear();const rcx=!!state.report.checks?.rc_network;for(const el of document.querySelectorAll('[data-wave="rcx"],#testbench-select option[value="rcx"],#pex-kind option[value="rcx"]'))el.disabled=!rcx;if(!rcx&&state.waveKind==='rcx')state.waveKind='postlayout';if(!rcx&&$('pex-kind').value==='rcx')$('pex-kind').value='postlayout';for(const el of document.querySelectorAll('[data-wave]'))el.classList.toggle('selected',el.dataset.wave===state.waveKind);renderOverview();renderSchematic();renderVerification();configureEvidenceSelectors();if(state.view==='waveforms')await loadWave();if(state.view==='layout')await loadLayout();if(state.view==='verification')await loadEvidence();if(state.view==='pex')await loadPex();if(state.view==='schematic')await loadSchematic();}
+async function loadRun(){if(!state.run){state.report=null;notice('No validation runs found for this process.',true);return;}if($('checkpoint-dialog').open)$('checkpoint-dialog').close();state.report=await api(query('/api/run',{process:state.process,run:state.run}));state.wave=null;state.analysis=null;state.analysisPromise=null;state.layout=null;state.rcLayout=null;state.rcSelection=null;state.drc=null;state.drcLayout=null;state.lvs=null;state.pex=null;state.schematic=null;state.editorExperiment=null;state.layers.clear();const rcx=!!state.report.checks?.rc_network;for(const el of document.querySelectorAll('[data-wave="rcx"],#testbench-select option[value="rcx"],#pex-kind option[value="rcx"]'))el.disabled=!rcx;if(!rcx&&state.waveKind==='rcx')state.waveKind='postlayout';if(!rcx&&$('pex-kind').value==='rcx')$('pex-kind').value='postlayout';for(const el of document.querySelectorAll('[data-wave]'))el.classList.toggle('selected',el.dataset.wave===state.waveKind);renderOverview();renderSchematic();renderVerification();configureEvidenceSelectors();if(state.view==='waveforms')await loadWave();if(state.view==='layout')await loadLayout();if(state.view==='verification')await loadEvidence();if(state.view==='pex')await loadPex();if(state.view==='schematic')await loadSchematic();}
 function checkpointRow(parent,item){const button=add(parent,'button',undefined,'pipeline-item pipeline-action');button.type='button';button.dataset.checkpoint=item.id;button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-label',`Inspect ${item.title} checkpoint`);add(button,'strong',item.title);const right=add(button,'span',undefined,'pipeline-right');add(right,'span',item.status,item.cls);add(right,'span','›','pipeline-chevron');}
 function checkpointData(){
   const report=state.report,c=report.checks||{},sch=metric(c,'schematic')||{},post=metric(c,'postlayout')||{},rc=metric(c,'rcx')||{},evidence=report.evidence_sha256||{};
@@ -96,6 +96,45 @@ async function loadWave(){
   requestAnimationFrame(()=>drawPlot($('wave-canvas'),data.samples,state.waveSignals));
   const stats=metric(state.report.checks,kind),box=$('wave-metrics');clear(box);
   for(const [label,value] of [['tPHL',fmtPs(stats?.tphl)],['tPLH',fmtPs(stats?.tplh)],['VOUT high',stats?.vout_high==null?'—':`${Number(stats.vout_high).toFixed(3)} V`],['VOUT low',stats?.vout_low==null?'—':`${Number(stats.vout_low).toExponential(2)} V`]]){const card=add(box,'div',undefined,'detail');add(card,'div',label,'label');add(card,'div',value,'value');}
+  loadAnalysis();
+}
+function analysisMessage(message){for(const id of ['wave-analysis','layout-analysis','pex-analysis'])$(id).textContent=message;}
+function analysisCard(parent,title,body){const card=add(parent,'div',undefined,'analysis-card');add(card,'strong',title);add(card,'p',body);}
+function renderAnalysis(){
+  const d=state.analysis;if(!d)return;
+  const wave=$('wave-analysis');clear(wave);
+  const table=add(wave,'div',undefined,'analysis-table');
+  for(const row of [['Trace','tPHL','tPLH','Fall 90–10%','Rise 10–90%'],...d.waveforms.map(item=>[
+    {schematic:'Schematic',postlayout:'C only',rcx:'Distributed R-C'}[item.kind],
+    `${item.tphl_ps.toFixed(2)} ps`,`${item.tplh_ps.toFixed(2)} ps`,
+    `${item.fall_90_10_ps.toFixed(2)} ps`,`${item.rise_10_90_ps.toFixed(2)} ps`])]){
+    const line=add(table,'div',undefined,'analysis-row');for(const value of row)add(line,'span',value);
+  }
+  const delta=d.deltas_ps;
+  analysisCard(wave,'Added delay in this run',`C only versus schematic: +${delta.tphl_ps.c_only_minus_schematic.toFixed(2)} ps falling, +${delta.tplh_ps.c_only_minus_schematic.toFixed(2)} ps rising. Distributed R-C versus C only: +${delta.tphl_ps.rc_minus_c_only.toFixed(2)} / +${delta.tplh_ps.rc_minus_c_only.toFixed(2)} ps.`);
+  analysisCard(wave,'What the traces say',`The extracted output transitions are slower than the schematic transitions. The 5 fF external output load is present in all three tests. The additional extracted network and device geometry account for the difference; R-C minus C-only cannot isolate resistance because the extraction topology also changes.`);
+  const layout=$('layout-analysis');clear(layout);
+  const geometry=state.process==='gf180'
+    ?'The two transistor gates are joined by a continuous polysilicon stripe. Its length and gate contacts are plausible contributors to the IN-to-gate resistance; the extraction does not assign an ohmic value to a specific poly shape.'
+    :'The metal2 IN and OUT buses span both transistor rows. Their area and proximity to other conductors plausibly contribute capacitance; the extracted network does not identify a capacitor plate or resistance layer.';
+  analysisCard(layout,'Gate access',`IN to NMOS gate: ${d.terminal_ohm['NMOS gate'].toFixed(2)} Ω. IN to PMOS gate: ${d.terminal_ohm['PMOS gate'].toFixed(2)} Ω. ${geometry}`);
+  analysisCard(layout,'Capacitor connections',`The top-level R-C netlist has ${d.incident_cap_ff.IN.toFixed(3)} fF touching IN and ${d.incident_cap_ff.OUT.toFixed(3)} fF touching OUT. Its largest elements are ${d.largest_capacitors.slice(0,3).map(item=>`${item.id} ${item.a}–${item.b} ${item.ff.toFixed(3)} fF`).join('; ')}. VDD–VSS capacitance couples supply rails; it is not an output load by itself.`);
+  if(d.reference){const r=d.reference;analysisCard(layout,'Measured layout revision',`Against the hashed reference ${r.run_id.slice(0,8)} with the same models, decks, testbench and worker: top-level C ${r.capacitance_change_ff.toFixed(3)} fF, PMOS gate path ${r.pmos_gate_resistance_change_ohm.toFixed(2)} Ω, R-C delay ${r.rc_tphl_change_ps.toFixed(2)} / ${r.rc_tplh_change_ps.toFixed(2)} ps (fall/rise). Negative means a reduction.`);}
+  analysisCard(layout,'Limits',d.limits);
+  const pex=$('pex-analysis');clear(pex);
+  analysisCard(pex,'Measured transition penalty',`Relative to the schematic, the R-C result adds ${(d.waveforms[2].tphl_ps-d.waveforms[0].tphl_ps).toFixed(2)} ps to the falling delay and ${(d.waveforms[2].tplh_ps-d.waveforms[0].tplh_ps).toFixed(2)} ps to the rising delay. Output 90–10% fall and 10–90% rise times are ${d.waveforms[2].fall_90_10_ps.toFixed(2)} / ${d.waveforms[2].rise_10_90_ps.toFixed(2)} ps.`);
+  if(d.reference)analysisCard(pex,'After the layout edit',`Compared with ${d.reference.run_id.slice(0,8)}, the validated R-C delays changed by ${d.reference.rc_tphl_change_ps.toFixed(2)} / ${d.reference.rc_tplh_change_ps.toFixed(2)} ps (fall/rise). Both runs used identical models, decks, stimulus and load; only layout.tcl changed.`);
+  analysisCard(pex,'Attribution',d.limits);
+}
+function loadAnalysis(){
+  if(!state.report?.checks?.rc_network){analysisMessage('This run has no distributed R-C evidence.');return;}
+  if(state.analysis){renderAnalysis();return;}
+  if(state.analysisPromise)return;
+  const process=state.process,run=state.run;analysisMessage('Measuring the three Mac ngspice traces and extracted network…');
+  state.analysisPromise=api(query('/api/waveform-analysis',{process,run}))
+    .then(data=>{if(process===state.process&&run===state.run){state.analysis=data;renderAnalysis();}})
+    .catch(err=>{if(process===state.process&&run===state.run)analysisMessage(`Waveform analysis unavailable: ${err.message}`);})
+    .finally(()=>{if(process===state.process&&run===state.run)state.analysisPromise=null;});
 }
 function canvasSetup(canvas){const rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;canvas.width=Math.max(1,Math.round(rect.width*dpr));canvas.height=Math.max(1,Math.round(rect.height*dpr));const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);return {ctx,w:rect.width,h:rect.height};}
 function drawPlot(canvas,samples,signals=new Set(['in','out'])){
@@ -143,6 +182,7 @@ async function loadLayout(){
   const list=$('layer-list');clear(list);
   for(const layer of data.layers){const label=add(list,'label',undefined,'layer-row');const input=add(label,'input');input.type='checkbox';input.checked=true;input.dataset.layer=layer.key;const swatch=add(label,'span',undefined,'layer-color');swatch.style.background=layer.color;add(label,'span',layer.name);add(label,'span',layer.count,'count');input.addEventListener('change',()=>{input.checked?state.layers.add(layer.key):state.layers.delete(layer.key);drawLayout();});}
   renderRcPanel();requestAnimationFrame(drawLayout);
+  loadAnalysis();
 }
 function layoutTransform(w,h,bbox){const [x0,y0,x1,y1]=bbox,scale=Math.min((w-80)/(x1-x0),(h-80)/(y1-y0))*state.layoutZoom,cx=(x0+x1)/2,cy=(y0+y1)/2;return {x:v=>w/2+(v-cx)*scale+state.layoutPan[0],y:v=>h/2-(v-cy)*scale+state.layoutPan[1],inverseX:px=>(px-w/2-state.layoutPan[0])/scale+cx,inverseY:py=>-(py-h/2-state.layoutPan[1])/scale+cy};}
 const rcColors={IN:'#5ad9e9',OUT:'#f6b76a',VDD:'#d4a6ff',VSS:'#98e4a7'};
@@ -391,6 +431,7 @@ async function loadPex(){
   const scope=$('pex-scope');clear(scope);for(const item of [data.scope,'Compare delays using the same model corner, input and load.','This is simulation evidence, not silicon measurement.'])add(scope,'div',item,'interpretation-item');
   const netlist=await api(query('/api/artifact',{...fields,name:data.netlist}));
   if(state.run===fields.run)$('pex-netlist').textContent=netlist.text;
+  loadAnalysis();
 }
 function attachEvidenceEvents(){
   $('pex-kind').addEventListener('change',()=>loadPex().catch(err=>notice(err.message,true)));

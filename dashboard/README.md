@@ -38,6 +38,13 @@ port to its MOS terminals. Straight links join electrical node anchors; they
 are not reconstructed wire paths or layer assignments. For mask-level editing
 and signoff review, open the GDS in native KLayout.
 
+Analysis panels under Waveforms, Layout and PEX now measure 50% delay and
+10–90%/90–10% output slew from the three native ngspice traces. They identify
+the largest extracted capacitor pairs and compare revised layouts with the
+original hashed Mac runs only when the PDK, model, deck, worker and testbench
+hashes agree. The extracted elements do not identify a unique conductor shape
+or layer; capacitance-only versus R-C also changes the flattening topology.
+
 The **DRC / LVS** view now parses KLayout marker coordinates and Netgen
 comparisons, including GF180's deliberate failing controls. **PEX** displays
 the capacitor network, explicit wire resistors, and full netlist for RC runs.

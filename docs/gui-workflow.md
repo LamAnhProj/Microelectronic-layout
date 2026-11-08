@@ -111,6 +111,18 @@ extracted SPICE is visible and copyable. Magic flattens a private copy of the
 connected cell for R-C extraction; original LVS and GDS evidence stay intact.
 The R-C result is open-PDK engineering evidence, not foundry signoff.
 
+For the revised inverter layouts, select the newest passed run in each
+process. The **Waveforms** analysis measures the first complete transition
+from the recorded native Mac ngspice traces and lists both 50% delays and
+output slew. The **Layout** analysis explains the large IN gate paths and
+capacitor net pairs below the GDS overlay. The **PEX** analysis repeats the
+measured delay comparison next to the extracted element lists. When the
+reference Mac run is present and all non-layout source, PDK and worker hashes
+match, each panel shows the measured change after the geometry edit. Use the
+run selector to inspect the original run directly. An extracted node link is
+not a physical wire route, and the C-only/R-C difference is not a pure
+resistance-only result.
+
 ## Spectre
 
 No Cadence Spectre executable or license configuration was found on this Mac.

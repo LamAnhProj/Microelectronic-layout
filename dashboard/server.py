@@ -24,8 +24,10 @@ import xml.etree.ElementTree as ET
 
 try:
     from .rc_layout import analyze_rc_layout
+    from .wave_analysis import analyze_trace
 except ImportError:  # Direct `python dashboard/server.py` launch.
     from rc_layout import analyze_rc_layout
+    from wave_analysis import analyze_trace
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +47,10 @@ PROCESSES = {
               "p_width": "2 µm", "corner": "typical", "min_v": 1.65,
               "n_symbol": "symbols/nfet_03v3.sym",
               "p_symbol": "symbols/pfet_03v3.sym"},
+}
+REFERENCE_RUNS = {
+    "sky130": "61dff494-ef22-4cbb-a9c8-6d069f581a8f",
+    "gf180": "bb8567ef-7ea6-4385-af9d-965561489f87",
 }
 LAYOUT_VARIANTS = {
     "sky130": {"connected": ("inverter.gds", "klayout_drc.xml")},
@@ -559,7 +565,8 @@ def waveform_data(process: str, run_id: str, kind: str) -> dict:
         metadata = base / "manifest.json"
         wave = base / "waveform.txt"
         existing = json.loads(metadata.read_text()) if metadata.is_file() else {}
-        if not wave.is_file() or existing.get("input_sha256") != fingerprint:
+        if (not wave.is_file() or existing.get("input_sha256") != fingerprint
+                or existing.get("wave_sha256") != digest(wave)):
             (base / "trace.spice").write_text(netlist)
             args = ["docker", "compose", "run", "--rm", "-v",
                     f"{PDK_ROOT}:/pdk:ro", "-e", "PDK_ROOT=/pdk",
@@ -576,6 +583,74 @@ def waveform_data(process: str, run_id: str, kind: str) -> dict:
     return {"kind": kind, "process": process, "run_id": run_id,
             "source": json.loads(metadata.read_text()).get("engine", "offline Docker worker"),
             "samples": read_waveform(wave), "manifest": json.loads(metadata.read_text())}
+
+
+def waveform_analysis_data(process: str, run_id: str) -> dict:
+    """Tie measured waveform changes to hashed layout and extraction evidence."""
+    report = report_data(process, run_id)
+    if report.get("status") != "passed" or not report.get("checks", {}).get("rc_network"):
+        raise ValueError("Select a passed distributed R-C run for waveform analysis")
+    supply = PROCESSES[process]["voltage"]
+    extracted = layout_rc_data(process, run_id)
+    rows = []
+    for kind, check in (("schematic", "baseline" if process == "sky130" else "schematic_simulation"),
+                        ("postlayout", "capacitance_extracted" if process == "sky130" else "capacitance_extracted_simulation"),
+                        ("rcx", "rc_extracted" if process == "sky130" else "rc_extracted_simulation")):
+        trace = waveform_data(process, run_id, kind)
+        metrics = analyze_trace(trace["samples"], supply)
+        recorded = report["checks"][check]
+        if any(abs(metrics[key + "_ps"] - recorded[key] * 1e12) > 0.5
+               for key in ("tphl", "tplh")):
+            raise ValueError(f"{kind} trace disagrees with the hashed run measurements")
+        rows.append({"kind": kind, "engine": trace["source"],
+                     "trace_sha256": trace["manifest"]["wave_sha256"], **metrics})
+    caps = sorted(extracted["capacitors"], key=lambda item: -item["ff"])
+    terminal = {f"{item['device']} {item['terminal']}": item["effective_ohm"]
+                for item in extracted["terminals"]}
+    incident = {net: round(sum(item["ff"] for item in caps
+                               if net in (item["net_a"], item["net_b"])), 5)
+                for net in ("IN", "OUT", "VDD", "VSS")}
+    reference = None
+    reference_id = REFERENCE_RUNS[process]
+    if run_id != reference_id and (RUNS / PROCESSES[process]["folder"] / reference_id / "report.json").is_file():
+        old = report_data(process, reference_id)
+        same_sources = (set(report["source_sha256"]) == set(old["source_sha256"])
+                        and all(report["source_sha256"][name] == old["source_sha256"][name]
+                                for name in report["source_sha256"] if name != "layout.tcl"))
+        if (old.get("status") == "passed" and same_sources
+                and report.get("pdk_sha256") == old.get("pdk_sha256")
+                and report.get("worker_image") == old.get("worker_image")
+                and report["source_sha256"]["layout.tcl"] != old["source_sha256"]["layout.tcl"]):
+            old_rc = layout_rc_data(process, reference_id)
+            key = "rc_extracted" if process == "sky130" else "rc_extracted_simulation"
+            current_delays, old_delays = report["checks"][key], old["checks"][key]
+            old_terminal = {f"{item['device']} {item['terminal']}": item["effective_ohm"]
+                            for item in old_rc["terminals"]}
+            reference = {"run_id": reference_id,
+                         "layout_sha256": old["source_sha256"]["layout.tcl"],
+                         "same_models_decks_testbench": True,
+                         "rc_tphl_change_ps": round((current_delays["tphl"] - old_delays["tphl"]) * 1e12, 4),
+                         "rc_tplh_change_ps": round((current_delays["tplh"] - old_delays["tplh"]) * 1e12, 4),
+                         "capacitance_change_ff": round(extracted["total_ff"] - old_rc["total_ff"], 5),
+                         "pmos_gate_resistance_change_ohm": round(terminal["PMOS gate"] - old_terminal["PMOS gate"], 4)}
+    return {"process": process, "run_id": run_id,
+            "layout_sha256": report["source_sha256"]["layout.tcl"],
+            "gds_sha256": extracted["gds_sha256"],
+            "rc_spice_sha256": extracted["spice_sha256"],
+            "waveforms": rows,
+            "deltas_ps": {key: {
+                "c_only_minus_schematic": round(rows[1][key] - rows[0][key], 4),
+                "rc_minus_c_only": round(rows[2][key] - rows[1][key], 4)}
+                for key in ("tphl_ps", "tplh_ps")},
+            "terminal_ohm": terminal, "incident_cap_ff": incident,
+            "largest_capacitors": [{"id": item["id"], "a": item["net_a"],
+                                    "b": item["net_b"], "ff": item["ff"]}
+                                   for item in caps[:5]],
+            "reference": reference,
+            "limits": "Capacitors touching a net are counted once for that net, so coupling appears in both nets' totals. "
+                      "Device intrinsic capacitance and the external 5 fF load are separate. "
+                      "C-only and R-C use different extraction topology after flattening; their subtraction does not isolate wire resistance. "
+                      "Node links cannot identify a specific metal shape or capacitor plate."}
 
 
 def exploratory_netlist(process: str, voltage: float, load_ff: float, temp_c: float) -> str:
@@ -742,6 +817,8 @@ class Handler(BaseHTTPRequestHandler):
                                                    q.get("variant", "connected")))
             if parsed.path == "/api/layout-rc":
                 return self.reply(200, layout_rc_data(q["process"], q["run"]))
+            if parsed.path == "/api/waveform-analysis":
+                return self.reply(200, waveform_analysis_data(q["process"], q["run"]))
             if parsed.path == "/api/drc":
                 return self.reply(200, drc_data(q["process"], q["run"],
                                                 q.get("variant", "connected")))
