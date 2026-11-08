@@ -134,6 +134,20 @@ interpolated DC VOUT=VIN switching point as its bias. Inspect the deck before
 interpreting gain or bandwidth, because the inverter is nonlinear outside
 that small-signal operating point.
 
+## Compare two layouts
+
+In **Layout**, the **Layout comparison** panel places the selected passed
+GDS beside an earlier passed GDS from the same process. A `fast` run defaults
+to its recorded standard-layout predecessor; the earlier-run selector can
+choose another compatible passed run. Zoom or drag either pane to move both
+in the same physical coordinate frame. Use the main layer checkboxes to
+filter both, toggle colored changed polygons, and click either image to probe
+the same coordinate and layer membership in both snapshots. The summary
+shows exact polygon differences and the two runs' extracted R-C delay and
+capacitance. The comparison refuses mismatched PDK/rule and circuit inputs.
+An added or removed polygon does not by itself establish a connectivity or
+DRC difference; inspect each run's separate LVS and DRC evidence for that.
+
 ## Spectre
 
 No Cadence Spectre executable or license configuration was found on this Mac.

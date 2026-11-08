@@ -24,10 +24,12 @@ import xml.etree.ElementTree as ET
 
 try:
     from .rc_layout import analyze_rc_layout
+    from .layout_compare import compare_layouts
     from .wave_analysis import analyze_trace
     from .pex_bench import build_deck, parse_table, dc_trip_v
 except ImportError:  # Direct `python dashboard/server.py` launch.
     from rc_layout import analyze_rc_layout
+    from layout_compare import compare_layouts
     from wave_analysis import analyze_trace
     from pex_bench import build_deck, parse_table, dc_trip_v
 
@@ -495,6 +497,50 @@ def layout_rc_data(process: str, run_id: str) -> dict:
     return result
 
 
+def layout_comparison_data(process: str, old_run: str, new_run: str) -> dict:
+    """Compare two validated GDS snapshots from the same process and inputs."""
+    if old_run == new_run:
+        raise ValueError("Choose two different layout runs")
+    old_report, new_report = report_data(process, old_run), report_data(process, new_run)
+    if old_report.get("status") != "passed" or new_report.get("status") != "passed":
+        raise ValueError("Both layout runs must have passed validation")
+    if old_report.get("pdk_sha256") != new_report.get("pdk_sha256"):
+        raise ValueError("The two runs use different PDK or rule-deck hashes")
+    for name in ("inverter.spice", "schematic.spice", "rcx.tcl"):
+        if old_report.get("source_sha256", {}).get(name) != new_report.get("source_sha256", {}).get(name):
+            raise ValueError(f"The two runs have different {name} inputs")
+    old_layout, new_layout = layout_data(process, old_run), layout_data(process, new_run)
+    for run, layout in ((old_run, old_layout), (new_run, new_layout)):
+        gds, _ = variant_files(process, run, "connected")
+        if digest(gds) != layout["gds_sha256"]:
+            raise ValueError("Cached GDS geometry no longer matches its artifact hash")
+    difference = compare_layouts(old_layout, new_layout)
+
+    def measurements(report: dict, run: str) -> dict:
+        checks = report["checks"]
+        delays = checks.get("rc_extracted") or checks.get("rc_extracted_simulation") or {}
+        rc = layout_rc_data(process, run) if checks.get("rc_network") else None
+        return {"run_id": run, "variant": report.get("layout_variant", "legacy"),
+                "layout_sha256": report.get("source_sha256", {}).get("layout.tcl"),
+                "gds_sha256": old_layout["gds_sha256"] if run == old_run else new_layout["gds_sha256"],
+                "shape_count": old_layout["shape_count"] if run == old_run else new_layout["shape_count"],
+                "rc_tphl_ps": round(delays["tphl"] * 1e12, 4) if "tphl" in delays else None,
+                "rc_tplh_ps": round(delays["tplh"] * 1e12, 4) if "tplh" in delays else None,
+                "rc_cap_ff": rc["total_ff"] if rc else None}
+
+    bbox = [min(old_layout["bbox"][0], new_layout["bbox"][0]),
+            min(old_layout["bbox"][1], new_layout["bbox"][1]),
+            max(old_layout["bbox"][2], new_layout["bbox"][2]),
+            max(old_layout["bbox"][3], new_layout["bbox"][3])]
+    return {"process": process, "bbox": bbox, "old": old_layout, "new": new_layout,
+            "old_measurements": measurements(old_report, old_run),
+            "new_measurements": measurements(new_report, new_run),
+            "difference": difference,
+            "scope": "Polygon changes are exact GDS geometry differences on the same layer. "
+                     "Highlighted shapes are not automatically DRC violations or net changes. "
+                     "Both runs passed the same PDK/model and schematic input checks."}
+
+
 def trace_netlist(process: str, run_id: str, kind: str, target: Path) -> str:
     if kind not in {"schematic", "postlayout", "rcx"}:
         raise ValueError("Unknown waveform kind")
@@ -923,6 +969,9 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/layout":
                 return self.reply(200, layout_data(q["process"], q["run"],
                                                    q.get("variant", "connected")))
+            if parsed.path == "/api/layout-comparison":
+                return self.reply(200, layout_comparison_data(q["process"],
+                    q["old"], q["new"]))
             if parsed.path == "/api/layout-rc":
                 return self.reply(200, layout_rc_data(q["process"], q["run"]))
             if parsed.path == "/api/waveform-analysis":

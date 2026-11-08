@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-const state = {overview:null,process:'sky130',run:null,report:null,view:'overview',waveKind:'schematic',waveSignals:new Set(['in','out']),wave:null,analysis:null,analysisPromise:null,layout:null,rcLayout:null,rcSelection:null,rcShowR:true,rcShowC:false,rcNet:'all',layers:new Set(),doc:null,experiment:null,plot:null,layoutZoom:1,layoutPan:[0,0],drag:null,drc:null,drcLayout:null,drcFocus:null,lvs:null,pex:null,pexBench:null,schematic:null,editorExperiment:null,checkpoints:[]};
+const state = {overview:null,process:'sky130',run:null,report:null,view:'overview',waveKind:'schematic',waveSignals:new Set(['in','out']),wave:null,analysis:null,analysisPromise:null,layout:null,rcLayout:null,rcSelection:null,rcShowR:true,rcShowC:false,rcNet:'all',comparison:null,comparisonRun:null,comparisonZoom:1,comparisonPan:[0,0],comparisonProbe:null,comparisonHighlight:true,layers:new Set(),doc:null,experiment:null,plot:null,layoutZoom:1,layoutPan:[0,0],drag:null,drc:null,drcLayout:null,drcFocus:null,lvs:null,pex:null,pexBench:null,schematic:null,editorExperiment:null,checkpoints:[]};
 
 async function api(path, options={}, retried=false) {
   const response = await fetch(path, options);
@@ -22,7 +22,7 @@ function drcValue(){const c=state.report?.checks||{};return state.process==='sky
 function magicValue(){const c=state.report?.checks||{};return state.process==='sky130'?c.magic_full_drc_errors:c.magic_connected_drc_errors;}
 function lvsValue(){const c=state.report?.checks||{};return state.process==='sky130'?c.lvs:c.connected_lvs;}
 function selectRun(){const options=state.overview.runs[state.process]||[];const select=$('run-select');clear(select);for(const item of options){const opt=add(select,'option',`${item.status.toUpperCase()} · ${item.layout_variant||'legacy'} · ${item.id.slice(0,8)}`);opt.value=item.id;}const chosen=options.find(item=>item.status==='passed')||options[0];state.run=chosen?.id||null;select.value=state.run||'';}
-async function loadRun(){if(!state.run){state.report=null;notice('No validation runs found for this process.',true);return;}if($('checkpoint-dialog').open)$('checkpoint-dialog').close();state.report=await api(query('/api/run',{process:state.process,run:state.run}));state.wave=null;state.analysis=null;state.analysisPromise=null;state.layout=null;state.rcLayout=null;state.rcSelection=null;state.drc=null;state.drcLayout=null;state.lvs=null;state.pex=null;state.pexBench=null;state.schematic=null;state.editorExperiment=null;state.layers.clear();const rcx=!!state.report.checks?.rc_network;for(const el of document.querySelectorAll('[data-wave="rcx"],#testbench-select option[value="rcx"],#pex-kind option[value="rcx"]'))el.disabled=!rcx;if(!rcx&&state.waveKind==='rcx')state.waveKind='postlayout';if(!rcx&&$('pex-kind').value==='rcx')$('pex-kind').value='postlayout';for(const el of document.querySelectorAll('[data-wave]'))el.classList.toggle('selected',el.dataset.wave===state.waveKind);renderOverview();renderSchematic();renderVerification();configureEvidenceSelectors();if(state.view==='waveforms')await loadWave();if(state.view==='layout')await loadLayout();if(state.view==='verification')await loadEvidence();if(state.view==='pex')await loadPex();if(state.view==='schematic')await loadSchematic();}
+async function loadRun(){if(!state.run){state.report=null;notice('No validation runs found for this process.',true);return;}if($('checkpoint-dialog').open)$('checkpoint-dialog').close();state.report=await api(query('/api/run',{process:state.process,run:state.run}));state.wave=null;state.analysis=null;state.analysisPromise=null;state.layout=null;state.rcLayout=null;state.rcSelection=null;state.comparison=null;state.comparisonRun=null;state.comparisonProbe=null;state.drc=null;state.drcLayout=null;state.lvs=null;state.pex=null;state.pexBench=null;state.schematic=null;state.editorExperiment=null;state.layers.clear();const rcx=!!state.report.checks?.rc_network;for(const el of document.querySelectorAll('[data-wave="rcx"],#testbench-select option[value="rcx"],#pex-kind option[value="rcx"]'))el.disabled=!rcx;if(!rcx&&state.waveKind==='rcx')state.waveKind='postlayout';if(!rcx&&$('pex-kind').value==='rcx')$('pex-kind').value='postlayout';for(const el of document.querySelectorAll('[data-wave]'))el.classList.toggle('selected',el.dataset.wave===state.waveKind);renderOverview();renderSchematic();renderVerification();configureEvidenceSelectors();if(state.view==='waveforms')await loadWave();if(state.view==='layout')await loadLayout();if(state.view==='verification')await loadEvidence();if(state.view==='pex')await loadPex();if(state.view==='schematic')await loadSchematic();}
 function checkpointRow(parent,item){const button=add(parent,'button',undefined,'pipeline-item pipeline-action');button.type='button';button.dataset.checkpoint=item.id;button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-label',`Inspect ${item.title} checkpoint`);add(button,'strong',item.title);const right=add(button,'span',undefined,'pipeline-right');add(right,'span',item.status,item.cls);add(right,'span','›','pipeline-chevron');}
 function checkpointData(){
   const report=state.report,c=report.checks||{},sch=metric(c,'schematic')||{},post=metric(c,'postlayout')||{},rc=metric(c,'rcx')||{},evidence=report.evidence_sha256||{};
@@ -180,8 +180,9 @@ async function loadLayout(){
   $('rc-canvas-detail').hidden=true;
   $('layout-count').textContent=`${data.shape_count.toLocaleString()} polygons · ${data.layers.length} layers${rc?` · ${rc.segments.length} R · ${rc.capacitors.length} C`:''}`;
   const list=$('layer-list');clear(list);
-  for(const layer of data.layers){const label=add(list,'label',undefined,'layer-row');const input=add(label,'input');input.type='checkbox';input.checked=true;input.dataset.layer=layer.key;const swatch=add(label,'span',undefined,'layer-color');swatch.style.background=layer.color;add(label,'span',layer.name);add(label,'span',layer.count,'count');input.addEventListener('change',()=>{input.checked?state.layers.add(layer.key):state.layers.delete(layer.key);drawLayout();});}
+  for(const layer of data.layers){const label=add(list,'label',undefined,'layer-row');const input=add(label,'input');input.type='checkbox';input.checked=true;input.dataset.layer=layer.key;const swatch=add(label,'span',undefined,'layer-color');swatch.style.background=layer.color;add(label,'span',layer.name);add(label,'span',layer.count,'count');input.addEventListener('change',()=>{input.checked?state.layers.add(layer.key):state.layers.delete(layer.key);drawLayout();drawComparison();});}
   renderRcPanel();requestAnimationFrame(drawLayout);
+  configureComparison();loadComparison();
   loadAnalysis();
 }
 function layoutTransform(w,h,bbox){const [x0,y0,x1,y1]=bbox,scale=Math.min((w-80)/(x1-x0),(h-80)/(y1-y0))*state.layoutZoom,cx=(x0+x1)/2,cy=(y0+y1)/2;return {x:v=>w/2+(v-cx)*scale+state.layoutPan[0],y:v=>h/2-(v-cy)*scale+state.layoutPan[1],inverseX:px=>(px-w/2-state.layoutPan[0])/scale+cx,inverseY:py=>-(py-h/2-state.layoutPan[1])/scale+cy};}
@@ -207,6 +208,108 @@ function drawLayout(){
     if(state.rcSelection){const collection=state.rcSelection.kind==='R'?rc.segments:rc.capacitors;const item=collection.find(row=>row.id===state.rcSelection.id);if(item)drawRcLink(ctx,tr,item,'#ffffff',5);}
   }
   canvas._layoutTransform=tr;
+}
+function configureComparison(){
+  const select=$('compare-run');clear(select);
+  const runs=state.overview.runs[state.process]||[];
+  const selectedIndex=runs.findIndex(item=>item.id===state.run);
+  const options=runs.slice(selectedIndex+1).filter(item=>item.status==='passed');
+  for(const item of options){const option=add(select,'option',`${item.layout_variant||'legacy'} · ${item.id.slice(0,8)}`);option.value=item.id;}
+  const preferred=state.comparisonRun||state.report?.comparison_run_id;
+  const chosen=options.find(item=>item.id===preferred)||options.find(item=>item.layout_variant==='standard')||options.find(item=>item.layout_variant==='original')||options[0];
+  state.comparisonRun=chosen?.id||null;select.value=state.comparisonRun||'';select.disabled=!chosen;
+}
+async function loadComparison(){
+  const process=state.process,newRun=state.run,oldRun=state.comparisonRun;
+  state.comparison=null;$('compare-summary').textContent=oldRun?'Reading and comparing the two hashed GDS snapshots…':'No earlier passed run is available for comparison.';
+  for(const id of ['compare-old-canvas','compare-new-canvas']){const {ctx,w,h}=canvasSetup($(id));ctx.fillStyle='#081b26';ctx.fillRect(0,0,w,h);}
+  for(const id of ['compare-old-label','compare-new-label','compare-old-foot','compare-new-foot','compare-scope'])$(id).textContent='';
+  clear($('compare-layer-summary'));
+  $('compare-probe').textContent='Click either layout to inspect the same coordinate in both.';
+  if(!oldRun)return;
+  try{
+    const data=await api(query('/api/layout-comparison',{process,old:oldRun,new:newRun}));
+    if(process!==state.process||newRun!==state.run||oldRun!==state.comparisonRun)return;
+    state.comparison=data;state.comparisonZoom=1;state.comparisonPan=[0,0];state.comparisonProbe=null;
+    renderComparison();requestAnimationFrame(drawComparison);
+  }catch(err){if(process===state.process&&newRun===state.run&&oldRun===state.comparisonRun)$('compare-summary').textContent=`Comparison unavailable: ${err.message}`;}
+}
+function compareTransform(w,h,bbox){
+  const [x0,y0,x1,y1]=bbox,cx=(x0+x1)/2,cy=(y0+y1)/2,scale=Math.min((w-42)/(x1-x0),(h-42)/(y1-y0))*state.comparisonZoom;
+  return {x:v=>w/2+(v-cx)*scale+state.comparisonPan[0],y:v=>h/2-(v-cy)*scale+state.comparisonPan[1],
+    inverseX:px=>(px-w/2-state.comparisonPan[0])/scale+cx,inverseY:py=>-(py-h/2-state.comparisonPan[1])/scale+cy};
+}
+function comparePolygon(ctx,tr,poly,fill,stroke,width=1){
+  ctx.beginPath();for(const ring of [poly.hull,...poly.holes]){ring.forEach(([x,y],i)=>i?ctx.lineTo(tr.x(x),tr.y(y)):ctx.moveTo(tr.x(x),tr.y(y)));ctx.closePath();}
+  ctx.fillStyle=fill;ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.fill('evenodd');ctx.stroke();
+}
+function drawComparison(){
+  const comparison=state.comparison;if(!comparison||state.view!=='layout')return;
+  for(const [side,id,highlight] of [['old','compare-old-canvas','#f48b83'],['new','compare-new-canvas','#75efb5']]){
+    const canvas=$(id),{ctx,w,h}=canvasSetup(canvas),tr=compareTransform(w,h,comparison.bbox),data=comparison[side];
+    ctx.fillStyle='#081b26';ctx.fillRect(0,0,w,h);ctx.strokeStyle='#173340';ctx.lineWidth=1;
+    for(let x=0;x<w;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
+    for(let y=0;y<h;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+    for(const layer of data.layers){if(!state.layers.has(layer.key))continue;
+      for(const poly of layer.polygons)comparePolygon(ctx,tr,poly,layer.color+'77',layer.color+'aa');
+      if(state.comparisonHighlight){const indexes=comparison.difference[side==='old'?'old_only':'new_only'][layer.key]||[];
+        for(const index of indexes)comparePolygon(ctx,tr,layer.polygons[index],highlight+'88',highlight,2.3);}
+    }
+    if(state.comparisonProbe){const px=tr.x(state.comparisonProbe[0]),py=tr.y(state.comparisonProbe[1]);
+      ctx.save();ctx.strokeStyle='#ffe8a0';ctx.lineWidth=1.5;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(px,0);ctx.lineTo(px,h);ctx.moveTo(0,py);ctx.lineTo(w,py);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.stroke();ctx.restore();}
+    canvas._compareTransform=tr;
+  }
+}
+function pointInRing(point,ring){
+  const [x,y]=point;let inside=false;
+  for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const [xi,yi]=ring[i],[xj,yj]=ring[j];
+    if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)inside=!inside;
+  }
+  return inside;
+}
+function layersAt(data,point){
+  const names=[];for(const layer of data.layers){if(!state.layers.has(layer.key))continue;
+    if(layer.polygons.some(poly=>pointInRing(point,poly.hull)&&!poly.holes.some(hole=>pointInRing(point,hole))))names.push(layer.name);
+  }return names;
+}
+function probeComparison(point){
+  const comparison=state.comparison;if(!comparison)return;state.comparisonProbe=point;
+  const oldLayers=layersAt(comparison.old,point),newLayers=layersAt(comparison.new,point);
+  $('compare-probe').textContent=`x ${point[0].toFixed(3)} µm · y ${point[1].toFixed(3)} µm — earlier: ${oldLayers.join(', ')||'no visible polygon'}; selected: ${newLayers.join(', ')||'no visible polygon'}. Layer membership at this point is geometry, not connectivity.`;
+  drawComparison();
+}
+function renderComparison(){
+  const d=state.comparison;if(!d)return;
+  const old=d.old_measurements,newer=d.new_measurements,diff=d.difference;
+  const delta=(a,b,unit)=>a==null||b==null?'unavailable':`${(b-a).toFixed(3)} ${unit}`;
+  $('compare-summary').textContent=`${diff.removed_polygons} earlier-only and ${diff.added_polygons} selected-only polygons across ${diff.layers.filter(row=>row.old_only||row.new_only).length} layers. R-C delay change: tPHL ${delta(old.rc_tphl_ps,newer.rc_tphl_ps,'ps')}; tPLH ${delta(old.rc_tplh_ps,newer.rc_tplh_ps,'ps')}. Extracted top-level C change: ${delta(old.rc_cap_ff,newer.rc_cap_ff,'fF')}.`;
+  $('compare-old-label').textContent=`${$('compare-run').selectedOptions[0]?.textContent||'earlier'} · GDS ${old.gds_sha256.slice(0,10)}`;
+  $('compare-new-label').textContent=`${state.report?.layout_variant||'selected'} · ${newer.run_id.slice(0,8)} · GDS ${newer.gds_sha256.slice(0,10)}`;
+  $('compare-old-foot').textContent=`${old.shape_count} polygons · R-C ${old.rc_tphl_ps?.toFixed(2)??'—'} / ${old.rc_tplh_ps?.toFixed(2)??'—'} ps · C ${old.rc_cap_ff?.toFixed(3)??'—'} fF`;
+  $('compare-new-foot').textContent=`${newer.shape_count} polygons · R-C ${newer.rc_tphl_ps?.toFixed(2)??'—'} / ${newer.rc_tplh_ps?.toFixed(2)??'—'} ps · C ${newer.rc_cap_ff?.toFixed(3)??'—'} fF`;
+  $('compare-probe').textContent='Click either layout to inspect the same coordinate in both.';
+  $('compare-scope').textContent=d.scope;
+  const list=$('compare-layer-summary');clear(list);
+  for(const layer of diff.layers.filter(row=>row.old_only||row.new_only)){
+    const card=add(list,'div',undefined,'compare-layer-item');add(card,'strong',layer.name);add(card,'span',`${layer.old_only} removed · ${layer.new_only} added`);
+  }
+  if(!list.children.length)add(list,'div','Every polygon matches at the recorded GDS coordinates.','empty-state');
+}
+function attachComparisonEvents(){
+  $('compare-run').addEventListener('change',event=>{state.comparisonRun=event.target.value;loadComparison();});
+  $('compare-highlight').addEventListener('change',event=>{state.comparisonHighlight=event.target.checked;drawComparison();});
+  $('compare-fit').addEventListener('click',()=>{state.comparisonZoom=1;state.comparisonPan=[0,0];drawComparison();});
+  $('toggle-layers').addEventListener('click',()=>drawComparison());
+  window.addEventListener('resize',()=>{if(state.view==='layout')drawComparison();});
+  for(const id of ['compare-old-canvas','compare-new-canvas']){
+    const canvas=$(id);
+    canvas.addEventListener('wheel',event=>{if(!state.comparison)return;event.preventDefault();state.comparisonZoom=Math.max(.35,Math.min(12,state.comparisonZoom*(event.deltaY<0?1.17:.85)));drawComparison();},{passive:false});
+    canvas.addEventListener('pointerdown',event=>{if(!state.comparison)return;canvas.setPointerCapture(event.pointerId);canvas._compareStart=[event.clientX,event.clientY,...state.comparisonPan];canvas._compareMoved=false;});
+    canvas.addEventListener('pointermove',event=>{if(!canvas._compareStart)return;const dx=event.clientX-canvas._compareStart[0],dy=event.clientY-canvas._compareStart[1];if(Math.hypot(dx,dy)>3)canvas._compareMoved=true;if(canvas._compareMoved){state.comparisonPan=[canvas._compareStart[2]+dx,canvas._compareStart[3]+dy];drawComparison();}});
+    canvas.addEventListener('pointerup',event=>{if(!canvas._compareStart)return;const moved=canvas._compareMoved;canvas._compareStart=null;if(!moved&&canvas._compareTransform){const rect=canvas.getBoundingClientRect(),tr=canvas._compareTransform;probeComparison([tr.inverseX(event.clientX-rect.left),tr.inverseY(event.clientY-rect.top)]);}});
+    canvas.addEventListener('pointercancel',()=>canvas._compareStart=null);
+  }
 }
 function renderRcPanel(){
   const rc=state.rcLayout;$('rc-show-resistors').disabled=!rc;$('rc-show-capacitors').disabled=!rc;$('rc-net-filter').disabled=!rc;
@@ -509,5 +612,5 @@ function attachWorkbenchEvents(){
 async function simulate(event){event.preventDefault();const button=event.currentTarget.querySelector('button[type=submit]');button.disabled=true;$('experiment-status').textContent='Running local ngspice…';try{const body={process:state.process,voltage:Number($('exp-voltage').value),load_ff:Number($('exp-load').value),temp_c:Number($('exp-temp').value)};const data=await api('/api/simulate',{method:'POST',headers:{'Content-Type':'application/json','X-Lab-Token':state.overview.token},body:JSON.stringify(body)});state.experiment=data;const m=data.manifest;$('experiment-status').textContent='Exploratory run saved';$('experiment-id').textContent=`Experiment ${m.id}`;const box=$('experiment-result');clear(box);for(const [label,value] of [['Process',state.overview.processes[m.process].title],['Supply',`${m.voltage} V`],['Load',`${m.load_ff} fF`],['Temperature',`${m.temp_c} °C`],['VOUT at 0.5 ns',`${m.high_v.toFixed(4)} V`],['VOUT at 2.0 ns',`${m.low_v.toFixed(4)} V`]]){const row=add(box,'div',undefined,'result-line');add(row,'span',label);add(row,'strong',value);}requestAnimationFrame(()=>drawPlot($('experiment-canvas'),data.samples));notice(`Exploratory run ${m.id.slice(0,8)} saved locally.`);}catch(err){$('experiment-status').textContent='Simulation failed';notice(err.message,true);}finally{button.disabled=false;}}
 async function rerun(){const button=$('rerun-button');button.disabled=true;try{const layout_variant=state.report?.layout_variant==='fast'?'fast':'standard';const data=await api('/api/validate',{method:'POST',headers:{'Content-Type':'application/json','X-Lab-Token':state.overview.token},body:JSON.stringify({process:state.process,layout_variant})});notice(`${layout_variant} layout validation started. Checking the new report…`);while(true){await new Promise(resolve=>setTimeout(resolve,2000));const job=await api(query('/api/job',{id:data.job_id}));if(job.state==='running')continue;if(job.state==='complete'){state.overview=await api('/api/overview');selectRun();await loadRun();notice(`Mac validation finished: ${job.report_status||'inspect report'} · ${job.run_id?.slice(0,8)||'no report'}`);}else notice(`Validation failed: ${job.output||'inspect worker logs'}`,true);break;}}catch(err){notice(err.message,true);}finally{button.disabled=false;}}
 function attachEvents(){$('process-select').addEventListener('change',async event=>{state.process=event.target.value;state.experiment=null;$('experiment-result').innerHTML='<div class="empty-state">Adjust a parameter and simulate to see a new trace.</div>';$('experiment-status').textContent='Ready to simulate';$('exp-voltage').value=state.overview.processes[state.process].voltage;selectRun();await loadRun();});$('run-select').addEventListener('change',async event=>{state.run=event.target.value;await loadRun();});for(const button of document.querySelectorAll('[data-view]'))button.addEventListener('click',()=>setView(button.dataset.view));for(const button of document.querySelectorAll('[data-goto]'))button.addEventListener('click',()=>setView(button.dataset.goto));for(const button of document.querySelectorAll('[data-wave]'))button.addEventListener('click',()=>{state.waveKind=button.dataset.wave;for(const el of document.querySelectorAll('[data-wave]'))el.classList.toggle('selected',el===button);loadWave().catch(err=>notice(err.message,true));});$('copy-netlist').addEventListener('click',()=>navigator.clipboard.writeText($('schematic-code').textContent).then(()=>notice('Netlist copied.')).catch(err=>notice(err.message,true)));$('open-artifact').addEventListener('click',async()=>{try{const data=await api(query('/api/artifact',{process:state.process,run:state.run,name:$('artifact-select').value}));$('artifact-content').textContent=data.text;}catch(err){notice(err.message,true);}});$('experiment-form').addEventListener('submit',simulate);$('rerun-button').addEventListener('click',rerun);$('fit-layout').addEventListener('click',()=>{state.layoutZoom=1;state.layoutPan=[0,0];drawLayout();});$('toggle-layers').addEventListener('click',()=>{const all=state.layers.size!==state.layout.layers.length;state.layers=new Set(all?state.layout.layers.map(layer=>layer.key):[]);for(const input of document.querySelectorAll('[data-layer]'))input.checked=all;drawLayout();});const canvas=$('layout-canvas');canvas.addEventListener('wheel',event=>{event.preventDefault();state.layoutZoom=Math.max(.35,Math.min(12,state.layoutZoom*(event.deltaY<0?1.17:.85)));drawLayout();},{passive:false});canvas.addEventListener('pointerdown',event=>{state.drag=[event.clientX,event.clientY,...state.layoutPan];canvas.setPointerCapture(event.pointerId);});canvas.addEventListener('pointermove',event=>{const rect=canvas.getBoundingClientRect(),tr=canvas._layoutTransform;if(tr)$('layout-coordinates').textContent=`x ${tr.inverseX(event.clientX-rect.left).toFixed(3)} µm · y ${tr.inverseY(event.clientY-rect.top).toFixed(3)} µm`;if(state.drag){state.layoutPan=[state.drag[2]+event.clientX-state.drag[0],state.drag[3]+event.clientY-state.drag[1]];drawLayout();}});canvas.addEventListener('pointerup',()=>state.drag=null);$('wave-canvas').addEventListener('mousemove',plotHover);$('wave-canvas').addEventListener('mouseleave',()=>$('wave-tooltip').hidden=true);window.addEventListener('resize',()=>{if(state.view==='layout')drawLayout();if(state.view==='waveforms'&&state.wave)drawPlot($('wave-canvas'),state.wave.samples,state.waveSignals);if(state.view==='experiments'&&state.experiment)drawPlot($('experiment-canvas'),state.experiment.samples);});}
-async function init(){try{state.overview=await api('/api/overview');const select=$('process-select');for(const [id,spec] of Object.entries(state.overview.processes)){const opt=add(select,'option',spec.title);opt.value=id;}select.value=state.process;$('exp-voltage').value=state.overview.processes[state.process].voltage;selectRun();renderDocList();attachEvents();attachEvidenceEvents();attachWorkbenchEvents();attachSchematicEvents();attachRcEvents();await loadRun();}catch(err){notice(`Dashboard failed to load: ${err.message}`,true);}}
+async function init(){try{state.overview=await api('/api/overview');const select=$('process-select');for(const [id,spec] of Object.entries(state.overview.processes)){const opt=add(select,'option',spec.title);opt.value=id;}select.value=state.process;$('exp-voltage').value=state.overview.processes[state.process].voltage;selectRun();renderDocList();attachEvents();attachEvidenceEvents();attachWorkbenchEvents();attachSchematicEvents();attachRcEvents();attachComparisonEvents();await loadRun();}catch(err){notice(`Dashboard failed to load: ${err.message}`,true);}}
 init();

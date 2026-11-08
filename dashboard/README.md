@@ -54,6 +54,17 @@ AC use separate input-hashed exploratory ngspice benches against that run's
 extracted netlist; AC is biased at the DC trip point. The 5 fF load and
 selected PDK model corner are preserved.
 
+The **Layout comparison** panel places the selected GDS beside an earlier
+passed run, defaulting to the fast layout's recorded comparison run. Scroll
+or drag either pane to zoom or pan both together. The layer checkboxes above
+apply to both, and the highlight switch marks polygons found only in the
+earlier snapshot (coral) or only in the selected one (green). Click a point
+to inspect visible layer membership at the same coordinate in both GDS files.
+The summary also compares validated R-C delays and extracted capacitance.
+Polygon changes are geometric differences, not automatically DRC violations
+or net changes. Each comparison requires matching PDK/rule, schematic,
+testbench and extraction-script hashes and verifies both GDS artifact hashes.
+
 The **DRC / LVS** view now parses KLayout marker coordinates and Netgen
 comparisons, including GF180's deliberate failing controls. **PEX** displays
 the capacitor network, explicit wire resistors, and full netlist for RC runs.

@@ -286,3 +286,17 @@ These DC/AC benches are exploratory Mac ngspice analyses, separate from the
 validated transient pipeline. The exact generated decks, settings, output
 hashes and plots are available in PEX. Small-signal gain at the switching
 point does not describe large-signal logic gain across the full input range.
+
+### Side-by-side GDS comparison
+
+The dashboard's read-only Layout comparison verifies two run reports use the
+same PDK/rule hashes, inverter stimulus and schematic inputs, then reads the
+hash-listed GDS files. It canonicalizes polygon rings so a different start
+vertex or winding direction is not mistaken for a geometry change. For the
+standard-to-fast runs, SKY130 has 94 old-only and 94 fast-only polygons
+across its 165-shape layouts; GF180 has 33 on each side across its 64-shape
+layouts. Moving a device naturally counts its original and new polygons
+separately. These counts are not a Boolean XOR area or a DRC result. The
+two canvases share a µm coordinate frame and zoom/pan, and a click compares
+visible layer membership at the same point in each snapshot. The previously
+recorded full DRC, LVS and transient reports remain the electrical evidence.
