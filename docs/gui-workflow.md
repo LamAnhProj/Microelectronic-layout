@@ -15,12 +15,13 @@ symbols. It generates and displays a SPICE netlist using Xschem 3.4.4 in the
 offline Docker worker. The two transistor connections and dimensions were
 checked against the existing inverter references.
 
-Native Xschem is not installed on this Mac. XQuartz is also absent; the
-attempted Homebrew installation stopped because the system package installer
-requires an administrator password in an interactive Terminal. Once XQuartz
-and a native Xschem build are installed, the dashboard's **Open native Xschem**
-button can launch the selected `.sch` with the pinned PDK symbols. Until then,
-the `.sch` files can be edited as source text and regenerated with **Refresh**.
+Native Xschem 3.4.4 is installed at
+`/Users/auslyn/.local/xschem-3.4.4/bin/xschem`, with an `xschem` link in
+`/opt/homebrew/bin`. XQuartz 2.8.6 and an X11-linked Tcl/Tk 8.6.18 build are
+installed. The native CLI successfully generated netlists for both PDK source
+schematics. Start XQuartz if needed, then use **Open native Xschem** to edit
+the selected `.sch` with its PDK symbols. Save in Xschem and choose **Refresh**
+in the dashboard to render and netlist the updated source.
 
 The current full validation runners still use their pinned `inverter.spice`
 inputs. Edits to `.sch` do **not** silently alter a validated run, layout or
@@ -29,6 +30,16 @@ SPICE evidence as a separate validated snapshot. **Simulate editor source**
 netlists the current `.sch` and runs an exploratory nominal ngspice transient;
 its waveform and hashes are saved under `runs/dashboard/editor_runs/`. This
 action does not rerun layout, DRC, LVS or extraction.
+
+The native Mac Xschem CLI was also checked independently of Docker for both
+PDKs. Its generated netlists ran with native ngspice 47 and the local PDK
+models, producing 6,044 transient samples per process. At 0.5 ns the low
+input gave a high output; at 2 ns the high input gave a low output; at 4 ns
+the output returned high. The local check files are under
+`runs/dashboard/native-xschem/` and `runs/dashboard/native-ngspice/`; each
+native ngspice directory has a `report.json` with source, deck, model entry
+point and waveform hashes. These are exploratory 25 °C, nominal supply, 5 fF
+tests, separate from the hashed full pipeline runs.
 
 ## DRC errors in the GUI
 
@@ -71,7 +82,11 @@ RC signoff estimate.
 
 No Cadence Spectre executable or license configuration was found on this Mac.
 Spectre is a separate licensed simulator; the current Volare PDK subsets and
-testbenches are validated here with ngspice. A Spectre run needs licensed
-Cadence access, an appropriate host, compatible model files, and a separately
-validated testbench. A SPICE-like file should not be relabeled as a Spectre
-result without executing that flow.
+testbenches are validated here with ngspice 47. It is the working SPICE
+simulator for both PDKs. Cadence's [University
+Program](https://www.cadence.com/en_US/home/company/cadence-academic-network/university-program.html)
+offers institutional access to custom IC tools; its advertised self-service
+free licenses for AWR and OrCAD do not establish free Spectre access. A Spectre
+run needs licensed Cadence access, an appropriate host, compatible model
+files, and a separately validated testbench. A SPICE-like file should not be
+relabeled as a Spectre result without executing that flow.

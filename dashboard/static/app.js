@@ -96,7 +96,7 @@ async function loadSchematic(){
   add(simulators,'div',data.ngspice_executable_found?'ngspice: installed on this Mac; worker testbench runs are available.':'ngspice: unavailable on this Mac.','interpretation-item');
   add(simulators,'div',data.spectre_executable_found?'Spectre executable found; license and compatible model validation are still required.':'Spectre: no executable found on this Mac. Licensed Cadence access and compatible models are required.','interpretation-item');
   $('open-xschem').disabled=!data.native_editor_available;
-  $('open-xschem').title=data.native_editor_available?'Open this .sch in Xschem':'XQuartz administrator install is needed for the native Xschem GUI';
+  $('open-xschem').title=data.native_editor_available?'Open this .sch in native Xschem':'Start XQuartz and refresh the schematic to enable the native editor';
 }
 function attachSchematicEvents(){
   for(const button of document.querySelectorAll('[data-schematic-view]'))button.addEventListener('click',()=>{

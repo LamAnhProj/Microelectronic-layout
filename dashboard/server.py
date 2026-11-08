@@ -68,6 +68,17 @@ TRACE_LOCK = threading.Lock()
 SCHEMATIC_LOCK = threading.Lock()
 
 
+def x11_display() -> str:
+    """Find the XQuartz display even when the dashboard predates its launch."""
+    if os.environ.get("DISPLAY"):
+        return os.environ["DISPLAY"]
+    if sys.platform != "darwin":
+        return ""
+    result = subprocess.run(["launchctl", "getenv", "DISPLAY"], capture_output=True,
+                            text=True, timeout=3, check=False)
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
 def digest(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as stream:
@@ -295,7 +306,7 @@ def schematic_data(process: str) -> dict:
     return {"process": process, "source": str(source), "source_sha256": source_hash,
             "preview_sha256": digest(svg), "netlist_sha256": digest(netlist),
             "netlist": text, "recognized_inverter": recognized,
-            "native_editor_available": bool(shutil.which("xschem")),
+            "native_editor_available": bool(shutil.which("xschem") and x11_display()),
             "ngspice_executable_found": bool(shutil.which("ngspice")),
             "spectre_executable_found": bool(shutil.which("spectre")),
             "scope": "Editable Xschem source; existing validation runs use their pinned SPICE input"}
@@ -305,14 +316,21 @@ def open_xschem(process: str) -> dict:
     source = schematic_source(process)
     executable = shutil.which("xschem")
     if not executable:
-        raise ValueError("Native Xschem GUI is unavailable; XQuartz requires an administrator install")
+        raise ValueError("Native Xschem is not installed")
+    display = x11_display()
+    if not display:
+        raise ValueError("XQuartz is not running; start it and try again")
     pdk_dir = PDK_ROOT / PROCESSES[process]["pdk"] / "libs.tech" / "xschem"
-    env = dict(os.environ, PDK_ROOT=str(PDK_ROOT), PWD=str(pdk_dir))
-    handle = subprocess.Popen([executable, "--rcfile", str(pdk_dir / "xschemrc"),
-                               str(source)], cwd=pdk_dir, env=env,
-                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL, start_new_session=True)
-    return {"pid": handle.pid, "source": str(source)}
+    env = dict(os.environ, PDK_ROOT=str(PDK_ROOT), PWD=str(pdk_dir), DISPLAY=display)
+    log_dir = RUNS / "dashboard" / "native-xschem"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"{process}-gui.log"
+    with log_path.open("ab") as log:
+        handle = subprocess.Popen([executable, "--rcfile", str(pdk_dir / "xschemrc"),
+                                   str(source)], cwd=pdk_dir, env=env,
+                                  stdin=subprocess.DEVNULL, stdout=log,
+                                  stderr=subprocess.STDOUT, start_new_session=True)
+    return {"pid": handle.pid, "source": str(source), "log": str(log_path)}
 
 
 def simulate_schematic(payload: dict) -> dict:
