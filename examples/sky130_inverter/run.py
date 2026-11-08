@@ -90,6 +90,10 @@ def require(pattern: str, output: str, name: str) -> None:
 
 
 def main() -> None:
+    variant = sys.argv[1] if len(sys.argv) == 2 else "standard"
+    if variant not in {"standard", "fast"}:
+        raise ValueError("Usage: run.py [standard|fast]")
+    layout_source = "layout_fast.tcl" if variant == "fast" else "layout.tcl"
     if (platform.system(), platform.machine()) != ("Darwin", "arm64"):
         raise RuntimeError("This run requires the user's native arm64 Mac")
     if PIN not in str(PDK.resolve()) or not PDK.is_dir():
@@ -99,14 +103,19 @@ def main() -> None:
     RUN.mkdir(parents=True, mode=0o700)
     os.chmod(RUN, 0o700)
     report: dict = {"status": "failed", "run": str(RUN),
+                    "layout_variant": variant,
+                    "layout_source_name": layout_source,
+                    "comparison_run_id": ("a48fd805-e40e-467e-8076-395e6b3caaae"
+                                          if variant == "fast" else None),
                     "host": {"system": platform.system(), "arch": platform.machine()},
                     "pdk_pin": PIN,
                     "scope": "open-PDK lab check; capacitance-only and distributed wire R-C extraction; no foundry signoff",
                     "checks": {}}
     try:
-        for name in ("inverter.spice", "schematic.spice", "layout.tcl",
+        for name in ("inverter.spice", "schematic.spice",
                      "design.json", "run.py"):
             shutil.copyfile(SOURCE / name, RUN / name)
+        shutil.copyfile(SOURCE / layout_source, RUN / "layout.tcl")
         shutil.copyfile(ROOT / "examples" / "rcx.tcl", RUN / "rcx.tcl")
         shutil.copyfile(ROOT / "examples" / "rcx_validate.py", RUN / "rcx_validate.py")
         report["source_sha256"] = {name: sha256(RUN / name) for name in

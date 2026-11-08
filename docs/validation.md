@@ -246,3 +246,43 @@ or resistor to a unique shape or conductor layer. The change from C-only to
 R-C simulation also includes flattening-related capacitance changes, so it
 cannot be labeled a resistance-only delay penalty. These remain nominal
 open-PDK simulations, not silicon measurements or foundry signoff.
+
+### Separate fast layout variants, 2026-11-08
+
+`examples/sky130_inverter/layout_fast.tcl` and
+`examples/gf180_inverter/layout_fast.tcl` preserve the prior validated
+`layout.tcl` files. Run either with `python3 examples/sky130_inverter/run.py fast`
+or `python3 examples/gf180_inverter/run.py fast`. Each runner copies the chosen
+source into its private UUID run as `layout.tcl`, records the variant and
+source hash, and executes the same DRC, LVS, extraction and simulation checks.
+
+| Process and fast Mac run | R-C C, prior → fast | IN→PMOS gate R, prior → fast | R-C tPHL, prior → fast | R-C tPLH, prior → fast |
+| --- | ---: | ---: | ---: | ---: |
+| SKY130A `131db9e7-f6f9-46c2-a293-3b3c0d55eda7` | 6.21625 → 6.07672 fF | 563.021 → 562.708 Ω | 27.4270 → 27.2181 ps | 34.6056 → 34.3251 ps |
+| GF180MCU D `d77486cf-979a-4b53-9ac2-72b975d43ae2` | 5.33810 → 5.16147 fF | 77.2290 → 50.5217 Ω | 44.2421 → 43.8085 ps | 45.9978 → 45.4324 ps |
+
+The fast GF180 variant brings PMOS another 1.5 µm toward NMOS, reducing the
+shared poly gate length. The fast SKY130 variant brings PMOS another 0.8 µm
+closer and pulls the OUT metal2 spine inward. Both pass Magic full DRC, native
+KLayout full DRC with zero reported items, unique Netgen LVS, detailed R-C
+topology checks, and transient acceptance on the Mac. Device sizes, model
+corner, 25 °C temperature, 5 fF load and input pulse remain fixed. The SKY130
+gate resistance is still high; the measured speed gain there is small.
+
+The PEX page also generates input-hashed DC and AC benches from the selected
+extracted netlist. DC sweeps VIN from 0 to the nominal supply in 10 mV
+(SKY130) or 20 mV (GF180) steps and interpolates the VOUT=VIN trip point.
+AC linearizes at that measured trip point with a 1 V small-signal source,
+40 points per decade from 1 kHz to 100 GHz, and the same 5 fF load. It
+reports gain and phase at 1 kHz and an interpolated −3 dB bandwidth. These
+R-C exploratory measurements provide a second performance check:
+
+| Process | DC trip, prior → fast | AC −3 dB bandwidth, prior → fast |
+| --- | ---: | ---: |
+| SKY130A | 0.868681 → 0.868682 V | 575.718 → 582.445 MHz |
+| GF180MCU D | 1.531854 → 1.531855 V | 334.246 → 337.605 MHz |
+
+These DC/AC benches are exploratory Mac ngspice analyses, separate from the
+validated transient pipeline. The exact generated decks, settings, output
+hashes and plots are available in PEX. Small-signal gain at the switching
+point does not describe large-signal logic gain across the full input range.

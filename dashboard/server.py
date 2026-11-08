@@ -25,9 +25,11 @@ import xml.etree.ElementTree as ET
 try:
     from .rc_layout import analyze_rc_layout
     from .wave_analysis import analyze_trace
+    from .pex_bench import build_deck, parse_table, dc_trip_v
 except ImportError:  # Direct `python dashboard/server.py` launch.
     from rc_layout import analyze_rc_layout
     from wave_analysis import analyze_trace
+    from pex_bench import build_deck, parse_table, dc_trip_v
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,6 +82,7 @@ DOCS = [
 JOBS: dict[str, dict] = {}
 JOB_LOCK = threading.Lock()
 TRACE_LOCK = threading.Lock()
+BENCH_LOCK = threading.Lock()
 SCHEMATIC_LOCK = threading.Lock()
 
 
@@ -113,6 +116,8 @@ def run_path(process: str, run_id: str) -> Path:
 
 def run_list(process: str) -> list[dict]:
     folder = RUNS / PROCESSES[process]["folder"]
+    standard_source = ROOT / "examples" / PROCESSES[process]["folder"] / "layout.tcl"
+    standard_hash = digest(standard_source) if standard_source.is_file() else None
     results = []
     if folder.is_dir():
         for path in folder.iterdir():
@@ -123,7 +128,12 @@ def run_list(process: str) -> list[dict]:
                 continue
             try:
                 report = json.loads(report_file.read_text())
+                variant = report.get("layout_variant")
+                if not variant:
+                    variant = ("standard" if report.get("source_sha256", {}).get("layout.tcl") == standard_hash
+                               else "original" if path.name == REFERENCE_RUNS[process] else "legacy")
                 results.append({"id": path.name, "status": report.get("status", "unknown"),
+                                "layout_variant": variant,
                                 "modified": report_file.stat().st_mtime})
             except (OSError, json.JSONDecodeError):
                 continue
@@ -611,12 +621,12 @@ def waveform_analysis_data(process: str, run_id: str) -> dict:
                                if net in (item["net_a"], item["net_b"])), 5)
                 for net in ("IN", "OUT", "VDD", "VSS")}
     reference = None
-    reference_id = REFERENCE_RUNS[process]
+    reference_id = report.get("comparison_run_id") or REFERENCE_RUNS[process]
     if run_id != reference_id and (RUNS / PROCESSES[process]["folder"] / reference_id / "report.json").is_file():
         old = report_data(process, reference_id)
         same_sources = (set(report["source_sha256"]) == set(old["source_sha256"])
                         and all(report["source_sha256"][name] == old["source_sha256"][name]
-                                for name in report["source_sha256"] if name != "layout.tcl"))
+                                for name in report["source_sha256"] if name not in {"layout.tcl", "run.py"}))
         if (old.get("status") == "passed" and same_sources
                 and report.get("pdk_sha256") == old.get("pdk_sha256")
                 and report.get("worker_image") == old.get("worker_image")
@@ -651,6 +661,103 @@ def waveform_analysis_data(process: str, run_id: str) -> dict:
                       "Device intrinsic capacitance and the external 5 fF load are separate. "
                       "C-only and R-C use different extraction topology after flattening; their subtraction does not isolate wire resistance. "
                       "Node links cannot identify a specific metal shape or capacitor plate."}
+
+
+def _pex_bench_run(process: str, run_id: str, kind: str, analysis: str,
+                   bias_v: float | None = None) -> dict:
+    """Run or read a private, input-hashed DC/AC bench against one PEX netlist."""
+    base = RUNS / "dashboard" / "pex_bench" / process / run_id / kind / analysis
+    base.mkdir(parents=True, mode=0o700, exist_ok=True)
+    os.chmod(base, 0o700)
+    transient = trace_netlist(process, run_id, kind, base)
+    supply = PROCESSES[process]["voltage"]
+    deck, settings = build_deck(transient, analysis, supply, bias_v)
+    pex = base / ("inverter_rcx.spice" if kind == "rcx" else "inverter_pex.spice")
+    fingerprint = hashlib.sha256((deck + digest(pex) + simulator_engine()).encode()).hexdigest()
+    bench_file, output, manifest_file = base / "bench.spice", base / "result.txt", base / "manifest.json"
+    existing = json.loads(manifest_file.read_text()) if manifest_file.is_file() else {}
+    if (not output.is_file() or existing.get("input_sha256") != fingerprint
+            or existing.get("output_sha256") != digest(output)
+            or not bench_file.is_file() or existing.get("deck_sha256") != digest(bench_file)):
+        output.unlink(missing_ok=True)
+        bench_file.write_text(deck)
+        args = ["docker", "compose", "run", "--rm", "-v", f"{PDK_ROOT}:/pdk:ro",
+                "-e", "PDK_ROOT=/pdk", "--workdir",
+                f"/results/dashboard/pex_bench/{process}/{run_id}/{kind}/{analysis}",
+                "--entrypoint", "ngspice", "worker", "-b", "bench.spice"]
+        engine = run_dashboard_spice(base, bench_file, args)
+        if not output.is_file():
+            raise ValueError("PEX bench did not export samples")
+        manifest_file.write_text(json.dumps({"input_sha256": fingerprint,
+            "deck_sha256": digest(bench_file), "output_sha256": digest(output),
+            "pex_sha256": digest(pex), "engine": engine,
+            "analysis": analysis, "process": process, "source_run": run_id,
+            "extraction_kind": kind}, indent=2) + "\n")
+    rows = parse_table(output.read_text())
+    manifest = json.loads(manifest_file.read_text())
+    if analysis == "dc":
+        result = {"trip_v": dc_trip_v(rows),
+                  "vout_at_zero_v": round(rows[0][2], 6),
+                  "vout_at_supply_v": round(rows[-1][2], 6)}
+    else:
+        initial_db, target_db = rows[0][1], rows[0][1] - 3
+        cutoff = None
+        for a, b in zip(rows, rows[1:]):
+            if a[1] >= target_db > b[1]:
+                fraction = (target_db - a[1]) / (b[1] - a[1])
+                cutoff = 10 ** (math.log10(a[0]) + fraction *
+                                (math.log10(b[0]) - math.log10(a[0])))
+                break
+        result = {"gain_at_1khz_db": round(initial_db, 4),
+                  "phase_at_1khz_deg": round(math.degrees(rows[0][2]), 3),
+                  "bandwidth_3db_hz": round(cutoff, 2) if cutoff else None}
+    return {"analysis": analysis, "settings": settings, "results": result,
+            "deck": bench_file.read_text(), "manifest": manifest,
+            "samples": rows}
+
+
+def pex_testbench_data(process: str, run_id: str, kind: str, analysis: str) -> dict:
+    if process not in PROCESSES or kind not in {"postlayout", "rcx"} or analysis not in {"transient", "dc", "ac"}:
+        raise ValueError("Unknown PEX testbench selection")
+    report = report_data(process, run_id)
+    if report.get("status") != "passed":
+        raise ValueError("Select a passed run for PEX testbenches")
+    pex_name = (("connected/rcx/inverter_rcx.spice" if process == "gf180" else "rcx/inverter_rcx.spice")
+                if kind == "rcx" else
+                ("connected/inverter_pex.spice" if process == "gf180" else "inverter_pex.spice"))
+    pex_hash = digest(verified_artifact(process, run_id, pex_name))
+    if analysis == "transient":
+        name = (("connected/rcx/postlayout_rcx.spice" if process == "gf180" else "rcx/postlayout_rcx.spice")
+                if kind == "rcx" else
+                ("connected/postlayout.spice" if process == "gf180" else "postlayout.spice"))
+        path = verified_artifact(process, run_id, name)
+        trace = waveform_data(process, run_id, kind)
+        result = analyze_trace(trace["samples"], PROCESSES[process]["voltage"])
+        stimulus = next(line for line in verified_artifact(process, run_id, "inverter.spice").read_text().splitlines()
+                        if line.startswith("VIN in 0 "))
+        rows = trace["samples"]
+        return {"process": process, "run_id": run_id, "kind": kind, "analysis": analysis,
+                "evidence": "Validated run deck; displayed trace regenerated on native Mac ngspice",
+                "pex_sha256": pex_hash, "deck_sha256": digest(path), "deck": path.read_text(),
+                "settings": {"supply_v": PROCESSES[process]["voltage"], "corner": PROCESSES[process]["corner"],
+                             "temperature_c": 25, "output_load_ff": 5,
+                             "input_pulse": stimulus.removeprefix("VIN in 0 "),
+                             "time_step_ps": 2, "stop_ns": 12,
+                             "measures": "50% tPHL/tPLH; VOUT high/low; 90–10%/10–90% output slew"},
+                "results": result, "samples": rows[::max(1, math.ceil(len(rows) / 800))],
+                "engine": trace["source"]}
+    with BENCH_LOCK:
+        bias = _pex_bench_run(process, run_id, kind, "dc")["results"]["trip_v"] if analysis == "ac" else None
+        bench = _pex_bench_run(process, run_id, kind, analysis, bias)
+    rows = bench.pop("samples")
+    return {"process": process, "run_id": run_id, "kind": kind, "analysis": analysis,
+            "evidence": "Exploratory native ngspice bench on the selected hashed extracted netlist",
+            "pex_sha256": pex_hash, "deck_sha256": bench["manifest"]["deck_sha256"],
+            "deck": bench["deck"], "settings": {"supply_v": PROCESSES[process]["voltage"],
+                "corner": PROCESSES[process]["corner"], **bench["settings"]},
+            "results": bench["results"],
+            "samples": rows[::max(1, math.ceil(len(rows) / 800))],
+            "engine": bench["manifest"]["engine"]}
 
 
 def exploratory_netlist(process: str, voltage: float, load_ff: float, temp_c: float) -> str:
@@ -720,19 +827,20 @@ def experiment_data(payload: dict) -> dict:
     return {"manifest": manifest, "samples": rows}
 
 
-def start_validation(process: str) -> str:
-    if process not in PROCESSES:
-        raise ValueError("Unknown process")
+def start_validation(process: str, layout_variant: str = "standard") -> str:
+    if process not in PROCESSES or layout_variant not in {"standard", "fast"}:
+        raise ValueError("Unknown process or layout variant")
     with JOB_LOCK:
         if any(job["state"] == "running" for job in JOBS.values()):
             raise ValueError("A validation run is already in progress")
         job_id = str(uuid.uuid4())
-        JOBS[job_id] = {"id": job_id, "process": process, "state": "running"}
+        JOBS[job_id] = {"id": job_id, "process": process,
+                        "layout_variant": layout_variant, "state": "running"}
 
     def execute() -> None:
         script = ROOT / "examples" / PROCESSES[process]["folder"] / "run.py"
         try:
-            result = subprocess.run([sys.executable, str(script)], cwd=ROOT,
+            result = subprocess.run([sys.executable, str(script), layout_variant], cwd=ROOT,
                                     capture_output=True, text=True, timeout=300,
                                     check=False)
             lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
@@ -828,6 +936,9 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/pex":
                 return self.reply(200, pex_data(q["process"], q["run"],
                                                 q.get("kind", "postlayout")))
+            if parsed.path == "/api/pex-testbench":
+                return self.reply(200, pex_testbench_data(q["process"], q["run"],
+                    q.get("kind", "postlayout"), q.get("analysis", "transient")))
             if parsed.path == "/api/schematic":
                 return self.reply(200, schematic_data(q["process"]))
             if parsed.path == "/api/schematic.svg":
@@ -858,7 +969,8 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/simulate":
                 return self.reply(200, experiment_data(payload))
             if self.path == "/api/validate":
-                return self.reply(202, {"job_id": start_validation(payload.get("process"))})
+                return self.reply(202, {"job_id": start_validation(payload.get("process"),
+                    payload.get("layout_variant", "standard"))})
             if self.path == "/api/open-klayout":
                 return self.reply(200, open_klayout(payload.get("process"),
                                                     payload.get("run"),

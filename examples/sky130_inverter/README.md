@@ -25,6 +25,13 @@ docker compose build --quiet worker
 python3 examples/sky130_inverter/run.py
 ```
 
+For the separately preserved compact variant, run
+`python3 examples/sky130_inverter/run.py fast`. It reads
+[`layout_fast.tcl`](layout_fast.tcl), records that source in a new UUID run,
+and compares against the prior `layout.tcl` run in the dashboard. The full
+Mac validation and exploratory AC/DC results are in
+[`docs/validation.md`](../../docs/validation.md).
+
 The PDK is from [Volare](https://github.com/chipfoundry/volare), which packages
 [open_pdks](https://github.com/fossi-foundation/open-pdks). The PDK install is
 ignored by Git and mounted read-only in the offline worker. The runner records

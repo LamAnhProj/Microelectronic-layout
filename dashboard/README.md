@@ -40,10 +40,19 @@ and signoff review, open the GDS in native KLayout.
 
 Analysis panels under Waveforms, Layout and PEX now measure 50% delay and
 10–90%/90–10% output slew from the three native ngspice traces. They identify
-the largest extracted capacitor pairs and compare revised layouts with the
-original hashed Mac runs only when the PDK, model, deck, worker and testbench
+the largest extracted capacitor pairs and compare revised layouts with their
+hashed reference Mac runs only when the PDK, model, deck, worker and testbench
 hashes agree. The extracted elements do not identify a unique conductor shape
 or layer; capacitance-only versus R-C also changes the flattening topology.
+
+The newest passed runs use separate `fast` layout sources for both PDKs;
+the run selector shows the variant. On **PEX**, choose capacitance-only or
+distributed R-C extraction, then choose **Transient**, **DC transfer**, or
+**AC small signal**. The panel shows the exact SPICE deck, full settings,
+measured results and a plot. Transient uses the validated run deck. DC and
+AC use separate input-hashed exploratory ngspice benches against that run's
+extracted netlist; AC is biased at the DC trip point. The 5 fF load and
+selected PDK model corner are preserved.
 
 The **DRC / LVS** view now parses KLayout marker coordinates and Netgen
 comparisons, including GF180's deliberate failing controls. **PEX** displays

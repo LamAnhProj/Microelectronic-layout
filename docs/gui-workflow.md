@@ -123,6 +123,17 @@ run selector to inspect the original run directly. An extracted node link is
 not a physical wire route, and the C-only/R-C difference is not a pure
 resistance-only result.
 
+The run selector labels the new `fast` variants. The previous `layout.tcl`
+sources remain in the repository; `layout_fast.tcl` is a separate geometry
+source in each process example. In **PEX**, first select C-only or R-C,
+then choose Transient, DC transfer or AC small signal in **Testbench and
+analysis**. Settings, results, a plot and the exact deck appear together.
+Transient is validated pipeline evidence. DC and AC are separate exploratory
+native Mac simulations on the selected extracted netlist. AC uses the
+interpolated DC VOUT=VIN switching point as its bias. Inspect the deck before
+interpreting gain or bandwidth, because the inverter is nonlinear outside
+that small-signal operating point.
+
 ## Spectre
 
 No Cadence Spectre executable or license configuration was found on this Mac.

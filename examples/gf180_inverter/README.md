@@ -30,6 +30,13 @@ uvx --from volare volare enable --pdk-root "$PWD/pdks/volare" --pdk gf180mcu -l 
 python3 examples/gf180_inverter/run.py
 ```
 
+For the separately preserved compact variant, run
+`python3 examples/gf180_inverter/run.py fast`. It reads
+[`layout_fast.tcl`](layout_fast.tcl), records that source in a new UUID run,
+and compares against the prior `layout.tcl` run in the dashboard. The full
+Mac validation and exploratory AC/DC results are in
+[`docs/validation.md`](../../docs/validation.md).
+
 Volare exposes GF180MCU A, B, C and D from this install. The experiment pins D,
 the five-metal variant with 1.1 µm top metal. The primitive install occupies
 about 2 GiB locally. PDK data stays ignored by Git and is mounted read-only in

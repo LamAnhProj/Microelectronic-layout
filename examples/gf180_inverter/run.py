@@ -104,6 +104,10 @@ def measure(output: str) -> dict[str, float]:
 
 
 def main() -> None:
+    variant = sys.argv[1] if len(sys.argv) == 2 else "standard"
+    if variant not in {"standard", "fast"}:
+        raise ValueError("Usage: run.py [standard|fast]")
+    layout_source = "layout_fast.tcl" if variant == "fast" else "layout.tcl"
     if (platform.system(), platform.machine()) != ("Darwin", "arm64"):
         raise RuntimeError("This diagnostic requires the native arm64 Mac")
     if PIN not in str(PDK.resolve()) or not KLAYOUT.is_file():
@@ -112,14 +116,18 @@ def main() -> None:
     os.chmod(RUN, 0o700)
     report: dict = {
         "status": "failed", "run": str(RUN), "pdk": "gf180mcuD",
+        "layout_variant": variant, "layout_source_name": layout_source,
+        "comparison_run_id": ("53c0cbd1-8b41-4346-a913-2c371ad8726e"
+                              if variant == "fast" else None),
         "pdk_pin": PIN, "host": {"system": platform.system(),
                                    "arch": platform.machine()},
         "scope": "open-PDK inverter check; capacitance-only and distributed wire R-C extraction; no foundry signoff",
         "checks": {}, "unresolved": []}
     try:
-        for name in ("inverter.spice", "schematic.spice", "layout.tcl",
+        for name in ("inverter.spice", "schematic.spice",
                      "disconnected_probe.tcl", "bad_pcell.tcl", "run.py"):
             shutil.copyfile(SOURCE / name, RUN / name)
+        shutil.copyfile(SOURCE / layout_source, RUN / "layout.tcl")
         shutil.copyfile(ROOT / "examples" / "rcx.tcl", RUN / "rcx.tcl")
         shutil.copyfile(ROOT / "examples" / "rcx_validate.py", RUN / "rcx_validate.py")
         report["source_sha256"] = {p.name: sha256(p) for p in RUN.iterdir()
