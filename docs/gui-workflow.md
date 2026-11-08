@@ -10,8 +10,8 @@ and tool evidence. Earlier cloud tests are separate evidence.
 The source schematics are
 [`examples/sky130_inverter/inverter.sch`](../examples/sky130_inverter/inverter.sch)
 and [`examples/gf180_inverter/inverter.sch`](../examples/gf180_inverter/inverter.sch).
-The dashboard's **Schematic → Xschem source** toggle renders their actual PDK
-symbols. It generates and displays a SPICE netlist using Xschem 3.4.4 in the
+The dashboard's **Schematic** view renders their actual PDK device symbols by
+default. It generates and displays a SPICE netlist using Xschem 3.4.4 in the
 offline Docker worker. The two transistor connections and dimensions were
 checked against the existing inverter references.
 
@@ -40,6 +40,25 @@ the output returned high. The local check files are under
 native ngspice directory has a `report.json` with source, deck, model entry
 point and waveform hashes. These are exploratory 25 °C, nominal supply, 5 fF
 tests, separate from the hashed full pipeline runs.
+
+## Pipeline, waveforms and testbenches
+
+Click any **Pipeline checkpoint** on the home page to inspect its measured
+status, source or report files and recorded SHA-256 hashes. The popup can read
+text evidence or open the related view. In **Waveforms**, the V(IN) and V(OUT)
+checkboxes control each trace independently. Selecting **Post-layout** shows
+the extracted simulation and selects its testbench below the plot.
+
+The pinned schematic testbench is `inverter.spice` in each selected run. The
+post-layout testbench is `postlayout.spice` for SKY130 and
+`connected/postlayout.spice` for GF180. The **Testbench used for this run**
+panel gives the exact local path and deck text. The post-layout deck retains
+the input pulse, supply, 5 fF load, temperature and model corner, includes
+`inverter_pex.spice`, and substitutes an `XINV` instance for the two schematic
+devices. The original run deck uses worker mount paths; the dashboard writes
+a Mac-local adapted trace deck under `runs/dashboard/traces/` when it displays
+a waveform. These trace replays are exploratory views of the pinned evidence;
+the full pipeline runner remains the validated measurement source.
 
 ## DRC errors in the GUI
 

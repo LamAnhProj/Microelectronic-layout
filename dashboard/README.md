@@ -8,8 +8,9 @@ make dashboard
 
 Open <http://127.0.0.1:8765>. The server binds only to loopback. It reads the
 selected run's report and evidence artifacts, parses its GDS with the native
-KLayout Python module, and uses the offline arm64 Docker worker for ngspice
-waveforms. It does not upload a design, PDK, report, or waveform.
+KLayout Python module, and uses native Mac ngspice for dashboard waveforms when
+available. The Docker worker remains the fallback and runs the full pipeline.
+It does not upload a design, PDK, report, or waveform.
 
 This session's server is already running in the background. If the URL opens,
 there is no need to start a second copy. Its log and PID are in
@@ -23,18 +24,21 @@ runner and saves a new UUID run under `runs/sky130_inverter/` or
 `runs/gf180_inverter/`. The dashboard distinguishes these from earlier cloud
 tests by showing the Mac run report's `Darwin` and `arm64` host fields.
 
-The waveform view reruns ngspice from the selected run's reference or
-capacitance-extracted netlist and saves traces under `runs/dashboard/traces/`.
+Click any home-page pipeline checkpoint to inspect its metrics, artifact hashes
+and recorded files. The waveform view can show V(IN), V(OUT), both or neither.
+It reruns ngspice from the selected run's reference or capacitance-extracted
+netlist and saves traces under `runs/dashboard/traces/`. The testbench panel
+shows the selected UUID's original `inverter.spice` or `postlayout.spice`.
 Crossing delays are read from the validated report, rather than estimated from
 the displayed sampled curve. The GDS view is a read-only polygon viewer. For
 mask-level editing and signoff review, open the GDS in native KLayout.
 
 The **DRC / LVS** view now parses KLayout marker coordinates and Netgen
 comparisons, including GF180's deliberate failing controls. **PEX** displays
-the extracted capacitor network and full netlist. **Schematic** renders an
-editable Xschem source via the worker and reports the availability of the
-native editor and Spectre. It can run a separate exploratory transient from
-that source. See [the GUI workflow](../docs/gui-workflow.md) for
+the extracted capacitor network and full netlist. **Schematic** shows the
+actual PDK symbols rendered from editable Xschem source and can launch native
+Xschem. It can run a separate exploratory transient from that source. See
+[the GUI workflow](../docs/gui-workflow.md) for
 the exact tool boundaries and steps.
 
 The current evidence covers schematic simulation, connected layout, Magic and

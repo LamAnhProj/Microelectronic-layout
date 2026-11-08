@@ -25,7 +25,7 @@
       </nav>
       <div class="sidebar-bottom">
         <div class="system-row"><span class="live-dot"></span> LOCAL MAC SESSION</div>
-        <p>PDKs and run bundles stay on this computer. Worker simulations run offline.</p>
+        <p>PDKs and run bundles stay on this computer. Simulations run locally.</p>
       </div>
     </aside>
 
@@ -58,23 +58,15 @@
 
         <section class="view" id="view-waveforms">
           <div class="page-heading compact"><div><div class="eyebrow">TRANSIENT ANALYSIS / 02</div><h1>Waveforms</h1><p>Input and output traces sampled from ngspice. Compare the schematic with capacitance-extracted layout.</p></div><div class="segmented"><button id="wave-schematic" class="selected" data-wave="schematic">Schematic</button><button id="wave-postlayout" data-wave="postlayout">Post-layout</button></div></div>
-          <div class="panel plot-panel"><div class="panel-heading"><h3>V(IN) and V(OUT)</h3><div class="legend"><span><i class="swatch input"></i> Input</span><span><i class="swatch output"></i> Output</span></div></div><div class="plot-wrap"><canvas id="wave-canvas" aria-label="Voltage waveforms over time"></canvas><div id="wave-tooltip" class="plot-tooltip" hidden></div></div><div class="plot-footer"><span id="wave-source">—</span><span>Time in ns · Voltage in V</span></div></div>
+          <div class="panel plot-panel"><div class="panel-heading"><h3>V(IN) and V(OUT)</h3><div class="signal-toggles" role="group" aria-label="Visible waveform signals"><label><input type="checkbox" data-signal="in" checked><i class="swatch input"></i> V(IN)</label><label><input type="checkbox" data-signal="out" checked><i class="swatch output"></i> V(OUT)</label></div></div><div class="plot-wrap"><canvas id="wave-canvas" aria-label="Voltage waveforms over time"></canvas><div id="wave-tooltip" class="plot-tooltip" hidden></div></div><div class="plot-footer"><span id="wave-source">—</span><span>Time in ns · Voltage in V</span></div></div>
+          <div class="panel testbench-panel"><div class="panel-heading"><div><div class="eyebrow">SIMULATION INPUT</div><h3>Testbench used for this run</h3></div><select id="testbench-select" aria-label="Testbench deck"><option value="schematic">Schematic testbench</option><option value="postlayout">Post-layout testbench</option></select></div><p id="testbench-summary" class="evidence-summary">Select a run to inspect its testbench.</p><div id="testbench-path" class="source-path mono"></div><details class="report-details"><summary>Read the exact SPICE deck</summary><pre id="testbench-code" class="code-block"></pre></details><p class="form-note">The post-layout deck keeps the same stimulus, supply, load and model corner, then includes the extracted inverter subcircuit. This is the deck from the selected validation UUID.</p></div>
           <div class="two-col"><div class="panel"><div class="panel-heading"><h3>Crossing measurements</h3></div><div id="wave-metrics" class="detail-grid"></div></div><div class="panel"><div class="panel-heading"><h3>Equations in this test</h3></div><div class="formula-list"><div><code>t<sub>PHL</sub> = t(VOUT = VDD/2, falling) − t(VIN = VDD/2, rising)</code></div><div><code>t<sub>PLH</sub> = t(VOUT = VDD/2, rising) − t(VIN = VDD/2, falling)</code></div><div><code>Δt = t<sub>post-layout</sub> − t<sub>schematic</sub></code></div></div></div></div>
         </section>
 
         <section class="view" id="view-schematic">
           <div class="page-heading compact"><div><div class="eyebrow">TOPOLOGY / 03</div><h1>Schematic</h1><p>A two-transistor CMOS inverter with physical source and bulk ties.</p></div></div>
           <div class="two-col schematic-grid">
-            <div class="panel schematic-panel"><div class="panel-heading"><h3>Connectivity</h3><div class="segmented"><button class="selected" data-schematic-view="functional">Functional</button><button data-schematic-view="xschem">Xschem source</button></div></div>
-              <svg id="functional-schematic" class="schematic-svg" viewBox="0 0 600 520" role="img" aria-label="CMOS inverter schematic with PMOS, NMOS, input, output and supply">
-                <defs><pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#2c4a5f"/></pattern></defs><rect width="600" height="520" fill="url(#dots)"/>
-                <g class="sch-wire"><path d="M300 55v48 M300 172v138 M300 377v90 M300 252h190 M75 252h110 M185 150v205 M185 150h58 M185 355h58 M358 150h55 V55 H300 M358 355h55 v112 H300"/><circle cx="300" cy="252" r="5"/><circle cx="185" cy="252" r="5"/></g>
-                <g class="sch-device"><rect x="245" y="105" width="112" height="67" rx="8"/><rect x="245" y="310" width="112" height="67" rx="8"/><path d="M280 119v39 M280 324v39 M243 119v39 M243 324v39"/><circle cx="243" cy="130" r="5"/></g>
-                <g class="sch-label"><text x="300" y="41" text-anchor="middle">VDD</text><text x="300" y="493" text-anchor="middle">VSS</text><text x="53" y="257">IN</text><text x="500" y="257">OUT</text><text x="300" y="141" text-anchor="middle">PMOS</text><text x="300" y="346" text-anchor="middle">NMOS</text><text x="355" y="240">C<tspan baseline-shift="sub" font-size="11">L</tspan></text></g>
-                <path class="sch-load" d="M480 252v42m-18 0h36m-36 9h36m-18 0v107"/><path class="sch-wire" d="M480 410h-180"/>
-              </svg>
-              <img id="xschem-image" class="xschem-image" alt="Xschem PDK transistor schematic preview" hidden>
-            </div>
+            <div class="panel schematic-panel"><div class="panel-heading"><h3>PDK device schematic</h3><span class="small-muted">Rendered from the editable Xschem source</span></div><p class="evidence-summary">These are the installed PDK transistor symbols and wired source, with body and supply connections shown. The 5 fF output load and input pulse live in the testbench.</p><img id="xschem-image" class="xschem-image" alt="Xschem schematic with PDK NMOS and PMOS device symbols" hidden></div>
             <div class="stack"><div class="panel"><div class="panel-heading"><h3>Device parameters</h3></div><div id="device-params" class="parameter-list"></div></div><div class="panel"><div class="panel-heading"><h3>Editable Xschem source</h3><button class="small-button" id="refresh-schematic">Refresh</button></div><div id="editor-status" class="evidence-summary">Checking editor…</div><div id="editor-source" class="source-path mono"></div><div class="editor-actions"><button id="open-xschem" class="button secondary">Open native Xschem</button><button id="copy-schematic-path" class="small-button">Copy path</button></div><p class="form-note">This source is editable. Existing validated runs remain pinned to their SPICE inputs until a new schematic-to-layout validation flow is built.</p><details class="report-details"><summary>Show generated Xschem netlist</summary><pre id="xschem-netlist" class="code-block"></pre></details></div><div class="panel"><div class="panel-heading"><h3>Simulate editor source</h3><button id="simulate-schematic" class="small-button">Run ngspice</button></div><p class="form-note">Exploratory 25 °C, nominal supply and 5 fF load. This tests the current `.sch` netlist; layout, DRC, LVS and PEX are separate.</p><div id="schematic-sim-status" class="small-muted">Ready</div><div class="schematic-plot"><canvas id="schematic-canvas" aria-label="Waveform from editable schematic"></canvas></div></div><div class="panel"><div class="panel-heading"><h3>Simulator availability</h3></div><div id="simulator-status" class="interpretation"></div></div><div class="panel"><div class="panel-heading"><h3>Validated reference SPICE</h3><button class="small-button" id="copy-netlist">Copy</button></div><pre id="schematic-code" class="code-block"></pre></div></div>
           </div>
         </section>
@@ -112,6 +104,14 @@
           <div class="panel plot-panel experiment-plot"><div class="panel-heading"><h3>Experiment waveform</h3><div class="legend"><span><i class="swatch input"></i> Input</span><span><i class="swatch output"></i> Output</span></div></div><div class="plot-wrap"><canvas id="experiment-canvas" aria-label="Exploratory input and output waveforms"></canvas></div><div class="plot-footer"><span id="experiment-id">—</span><span>Time in ns · Voltage in V</span></div></div>
         </section>
       </main>
+      <dialog id="checkpoint-dialog" class="checkpoint-dialog" aria-labelledby="checkpoint-title">
+        <div class="dialog-heading"><div><div class="eyebrow">PIPELINE CHECKPOINT</div><h2 id="checkpoint-title">Evidence</h2></div><button id="checkpoint-close" class="small-button" type="button" aria-label="Close checkpoint details">✕</button></div>
+        <div id="checkpoint-status" class="checkpoint-status"></div>
+        <p id="checkpoint-description"></p>
+        <div id="checkpoint-facts" class="checkpoint-facts"></div>
+        <div class="eyebrow">RUN EVIDENCE</div><div id="checkpoint-files" class="checkpoint-files"></div><pre id="checkpoint-artifact" class="code-block" hidden></pre>
+        <div class="dialog-actions"><button id="checkpoint-open-view" class="button primary" type="button">Open related view</button><span id="checkpoint-run" class="small-muted mono"></span></div>
+      </dialog>
     </div>
   </div>
 </body>

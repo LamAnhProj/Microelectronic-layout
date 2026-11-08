@@ -32,10 +32,14 @@ UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 PROCESSES = {
     "sky130": {"title": "SKY130A", "folder": "sky130_inverter", "pdk": "sky130A",
                "voltage": 1.8, "channel": "0.15 µm", "n_width": "1 µm",
-               "p_width": "2 µm", "corner": "tt", "min_v": 0.9},
+               "p_width": "2 µm", "corner": "tt", "min_v": 0.9,
+               "n_symbol": "sky130_fd_pr/nfet_01v8.sym",
+               "p_symbol": "sky130_fd_pr/pfet_01v8.sym"},
     "gf180": {"title": "GF180MCU D", "folder": "gf180_inverter", "pdk": "gf180mcuD",
               "voltage": 3.3, "channel": "0.28 µm", "n_width": "1 µm",
-              "p_width": "2 µm", "corner": "typical", "min_v": 1.65},
+              "p_width": "2 µm", "corner": "typical", "min_v": 1.65,
+              "n_symbol": "symbols/nfet_03v3.sym",
+              "p_symbol": "symbols/pfet_03v3.sym"},
 }
 LAYOUT_VARIANTS = {
     "sky130": {"connected": ("inverter.gds", "klayout_drc.xml")},
@@ -123,17 +127,12 @@ def report_data(process: str, run_id: str) -> dict:
         if name.endswith((".spice", ".tcl", ".log", ".txt", ".xml", ".lyrdb")):
             artifacts.append(name)
     report["artifacts"] = sorted(artifacts)
+    report["local_path"] = str(path)
     return report
 
 
 def artifact_text(process: str, run_id: str, name: str) -> str:
-    base = run_path(process, run_id)
-    report = json.loads((base / "report.json").read_text())
-    if name not in report.get("evidence_sha256", {}):
-        raise ValueError("Artifact is not in the run manifest")
-    path = (base / name).resolve()
-    if not path.is_relative_to(base.resolve()) or not path.is_file():
-        raise ValueError("Artifact path is invalid")
+    path = verified_artifact(process, run_id, name)
     if path.stat().st_size > 2_000_000 or not name.endswith(
             (".spice", ".tcl", ".log", ".txt", ".xml", ".lyrdb")):
         raise ValueError("Artifact is not a small text file")
@@ -373,17 +372,16 @@ def simulate_schematic(payload: dict) -> dict:
             "-e", "PDK_ROOT=/pdk", "--workdir",
             f"/results/dashboard/editor_runs/{experiment_id}", "--entrypoint",
             "ngspice", "worker", "-b", "editor.spice"]
-    result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True,
-                            timeout=90, check=False)
-    (base / "ngspice.log").write_text(result.stdout + result.stderr)
+    engine = run_dashboard_spice(base, source, args)
     wave = base / "waveform.txt"
-    if result.returncode or not wave.is_file():
+    if not wave.is_file():
         raise ValueError(f"Editor experiment {experiment_id} failed; inspect its local ngspice log")
     samples = read_waveform(wave)
     manifest = {"id": experiment_id, "status": "exploratory", "process": process,
                 "schematic_sha256": data["source_sha256"],
                 "xschem_netlist_sha256": data["netlist_sha256"],
                 "deck_sha256": digest(source), "wave_sha256": digest(wave),
+                "engine": engine,
                 "supply_v": spec["voltage"], "load_ff": 5, "temp_c": 25}
     (base / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return {"manifest": manifest, "samples": samples}
@@ -441,14 +439,12 @@ def layout_data(process: str, run_id: str, variant: str = "connected") -> dict:
 def trace_netlist(process: str, run_id: str, kind: str, target: Path) -> str:
     if kind not in {"schematic", "postlayout"}:
         raise ValueError("Unknown waveform kind")
-    base = run_path(process, run_id)
-    source = (base / "inverter.spice").read_text()
+    source = verified_artifact(process, run_id, "inverter.spice").read_text()
     lines = [line for line in source.splitlines()
              if not line.lower().startswith((".tran", ".meas", ".end"))]
     if kind == "postlayout":
-        pex = (base / "connected" / "inverter_pex.spice") if process == "gf180" else (base / "inverter_pex.spice")
-        if not pex.is_file():
-            raise ValueError("No extracted netlist for this run")
+        pex_name = "connected/inverter_pex.spice" if process == "gf180" else "inverter_pex.spice"
+        pex = verified_artifact(process, run_id, pex_name)
         shutil.copyfile(pex, target / "inverter_pex.spice")
         if process == "gf180":
             prefixes = ("XMN out", "XMP out")
@@ -482,13 +478,37 @@ def read_waveform(path: Path) -> list[list[float]]:
     return rows
 
 
+def simulator_engine() -> str:
+    return "native Mac ngspice" if sys.platform == "darwin" and shutil.which("ngspice") else "offline Docker worker"
+
+
+def run_dashboard_spice(base: Path, deck: Path, docker_args: list[str]) -> str:
+    """Run a private dashboard deck on the Mac, with the worker as fallback."""
+    native = shutil.which("ngspice") if sys.platform == "darwin" else None
+    if native:
+        original = deck.read_text()
+        deck.write_text(original.replace("/pdk/", f"{PDK_ROOT}/"))
+        args, cwd, engine = [native, "-b", deck.name], base, "native Mac ngspice"
+    else:
+        args, cwd, engine = docker_args, ROOT, "offline Docker worker"
+    result = subprocess.run(args, cwd=cwd, capture_output=True, text=True,
+                            timeout=90, check=False)
+    log = base / "ngspice.log"
+    log.write_text(result.stdout + result.stderr)
+    if result.returncode:
+        detail = (result.stderr or result.stdout).strip().splitlines()
+        raise ValueError(f"{engine} failed: {detail[-1] if detail else 'see ngspice.log'}")
+    return engine
+
+
 def waveform_data(process: str, run_id: str, kind: str) -> dict:
     base = RUNS / "dashboard" / "traces" / process / run_id / kind
     with TRACE_LOCK:
         base.mkdir(parents=True, exist_ok=True)
         netlist = trace_netlist(process, run_id, kind, base)
         pex = base / "inverter_pex.spice"
-        fingerprint = hashlib.sha256((netlist + (digest(pex) if pex.is_file() else "")).encode()).hexdigest()
+        fingerprint = hashlib.sha256((netlist + (digest(pex) if pex.is_file() else "")
+                                      + simulator_engine()).encode()).hexdigest()
         metadata = base / "manifest.json"
         wave = base / "waveform.txt"
         existing = json.loads(metadata.read_text()) if metadata.is_file() else {}
@@ -498,17 +518,16 @@ def waveform_data(process: str, run_id: str, kind: str) -> dict:
                     f"{PDK_ROOT}:/pdk:ro", "-e", "PDK_ROOT=/pdk",
                     "--workdir", f"/results/dashboard/traces/{process}/{run_id}/{kind}",
                     "--entrypoint", "ngspice", "worker", "-b", "trace.spice"]
-            result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True,
-                                    timeout=90, check=False)
-            (base / "ngspice.log").write_text(result.stdout + result.stderr)
-            if result.returncode or not wave.is_file():
+            engine = run_dashboard_spice(base, base / "trace.spice", args)
+            if not wave.is_file():
                 raise ValueError("Waveform simulation failed; see dashboard trace log")
             metadata.write_text(json.dumps({"input_sha256": fingerprint,
                                             "wave_sha256": digest(wave),
                                             "kind": kind, "process": process,
-                                            "source_run": run_id}, indent=2) + "\n")
+                                            "source_run": run_id,
+                                            "engine": engine}, indent=2) + "\n")
     return {"kind": kind, "process": process, "run_id": run_id,
-            "source": "ngspice on the Mac arm64 Docker worker",
+            "source": json.loads(metadata.read_text()).get("engine", "offline Docker worker"),
             "samples": read_waveform(wave), "manifest": json.loads(metadata.read_text())}
 
 
@@ -561,11 +580,9 @@ def experiment_data(payload: dict) -> dict:
             "-e", "PDK_ROOT=/pdk", "--workdir",
             f"/results/dashboard/experiments/{run_id}", "--entrypoint",
             "ngspice", "worker", "-b", "experiment.spice"]
-    result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True,
-                            timeout=90, check=False)
-    (base / "ngspice.log").write_text(result.stdout + result.stderr)
+    engine = run_dashboard_spice(base, base / "experiment.spice", args)
     wave = base / "waveform.txt"
-    if result.returncode or not wave.is_file():
+    if not wave.is_file():
         raise ValueError(f"Experiment {run_id} failed; inspect its ngspice log")
     rows = read_waveform(wave)
     # Sample away from switching edges for high/low levels. Crossing delays
@@ -574,6 +591,7 @@ def experiment_data(payload: dict) -> dict:
     low = min(rows, key=lambda row: abs(row[0] - 2.0))[2]
     manifest = {"id": run_id, "status": "exploratory", "process": process,
                 "voltage": voltage, "load_ff": load_ff, "temp_c": temp_c,
+                "engine": engine,
                 "netlist_sha256": digest(base / "experiment.spice"),
                 "wave_sha256": digest(wave), "high_v": high, "low_v": low}
     (base / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
