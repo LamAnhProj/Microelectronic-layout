@@ -29,6 +29,14 @@ Crossing delays are read from the validated report, rather than estimated from
 the displayed sampled curve. The GDS view is a read-only polygon viewer. For
 mask-level editing and signoff review, open the GDS in native KLayout.
 
+The **DRC / LVS** view now parses KLayout marker coordinates and Netgen
+comparisons, including GF180's deliberate failing controls. **PEX** displays
+the extracted capacitor network and full netlist. **Schematic** renders an
+editable Xschem source via the worker and reports the availability of the
+native editor and Spectre. It can run a separate exploratory transient from
+that source. See [the GUI workflow](../docs/gui-workflow.md) for
+the exact tool boundaries and steps.
+
 The current evidence covers schematic simulation, connected layout, Magic and
 native KLayout DRC, Netgen LVS, and capacitance extraction for the two inverter
 cells. It does not cover antenna or density signoff, distributed wire

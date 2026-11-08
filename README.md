@@ -58,6 +58,8 @@ for the working editor connection and circuit runner.
 For a local view of both process runs, waveforms, equations, GDS layers,
 DRC/LVS evidence, documents, and exploratory simulations, run `make dashboard`
 and open <http://127.0.0.1:8765>. See [the dashboard guide](dashboard/README.md).
+For native KLayout markers, Netgen LVS comparisons, PEX and the editable
+Xschem source, see [the GUI workflow](docs/gui-workflow.md).
 
 With the pinned local Volare SKY130A subset and built worker, run
 `python3 examples/sky130_inverter/run.py` on the Mac. It checks a two-transistor

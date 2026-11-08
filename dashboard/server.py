@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -36,8 +37,23 @@ PROCESSES = {
               "voltage": 3.3, "channel": "0.28 µm", "n_width": "1 µm",
               "p_width": "2 µm", "corner": "typical", "min_v": 1.65},
 }
+LAYOUT_VARIANTS = {
+    "sky130": {"connected": ("inverter.gds", "klayout_drc.xml")},
+    "gf180": {
+        "connected": ("connected/inverter.gds", "connected/main.lyrdb"),
+        "default_pcell": ("default_pcell/inverter.gds", "default_pcell/metal1.lyrdb"),
+        "probe": ("probe/inverter.gds", "probe/metal1.lyrdb"),
+    },
+}
+LVS_VARIANTS = {
+    "sky130": {"connected": "lvs_report.txt", "wrong_reference": "lvs_negative_report.txt"},
+    "gf180": {"connected": "connected/lvs_report.txt",
+              "disconnected_probe": "probe/lvs_report.txt",
+              "wrong_bulk": "connected/lvs_negative_report.txt"},
+}
+COORDINATE = re.compile(r"(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)")
 DOCS = [
-    "README.md", "dashboard/README.md", "docs/validation.md",
+    "README.md", "dashboard/README.md", "docs/gui-workflow.md", "docs/validation.md",
     "docs/setup-macos.md", "docs/pdks-and-data.md",
     "docs/architecture.md", "docs/bridge.md", "docs/agent-workflow.md",
     "docs/learning-plan.md", "docs/storage-r2.md",
@@ -49,6 +65,7 @@ DOCS = [
 JOBS: dict[str, dict] = {}
 JOB_LOCK = threading.Lock()
 TRACE_LOCK = threading.Lock()
+SCHEMATIC_LOCK = threading.Lock()
 
 
 def digest(path: Path) -> str:
@@ -112,14 +129,253 @@ def artifact_text(process: str, run_id: str, name: str) -> str:
     return path.read_text(errors="replace")
 
 
-@lru_cache(maxsize=12)
-def layout_data(process: str, run_id: str) -> dict:
+def verified_artifact(process: str, run_id: str, name: str) -> Path:
+    base = run_path(process, run_id)
+    manifest = json.loads((base / "report.json").read_text()).get("evidence_sha256", {})
+    if name not in manifest:
+        raise ValueError("Artifact is absent from this run's evidence manifest")
+    path = (base / name).resolve()
+    if not path.is_relative_to(base.resolve()) or not path.is_file():
+        raise ValueError("Artifact path is invalid")
+    if digest(path) != manifest[name]:
+        raise ValueError("Artifact hash no longer matches its run report")
+    return path
+
+
+def variant_files(process: str, run_id: str, variant: str) -> tuple[Path, Path]:
+    try:
+        gds_name, rdb_name = LAYOUT_VARIANTS[process][variant]
+    except KeyError:
+        raise ValueError("Unknown layout variant") from None
+    return (verified_artifact(process, run_id, gds_name),
+            verified_artifact(process, run_id, rdb_name))
+
+
+def drc_data(process: str, run_id: str, variant: str) -> dict:
+    gds, rdb = variant_files(process, run_id, variant)
+    tree = ET.parse(rdb)
+    root = tree.getroot()
+    categories = {category.findtext("name", ""): category.findtext("description", "")
+                  for category in root.findall("./categories/category")}
+    markers = []
+    for index, item in enumerate(root.findall("./items/item")):
+        if index >= 5000:
+            raise ValueError("Marker database exceeds viewer limit")
+        rule = (item.findtext("category") or "unknown").strip("'\"")
+        values = [value.text or "" for value in item.findall("./values/value")]
+        points = [(float(x), float(y)) for value in values
+                  for x, y in COORDINATE.findall(value)]
+        bbox = ([min(x for x, _ in points), min(y for _, y in points),
+                 max(x for x, _ in points), max(y for _, y in points)] if points else None)
+        markers.append({"index": index + 1, "rule": rule,
+                        "description": categories.get(rule, rule),
+                        "values": values, "bbox": bbox})
+    return {"process": process, "run_id": run_id, "variant": variant,
+            "gds_sha256": digest(gds), "rdb_sha256": digest(rdb),
+            "markers": markers, "count": len(markers),
+            "generator": root.findtext("generator") or "KLayout"}
+
+
+def lvs_data(process: str, run_id: str, variant: str) -> dict:
+    try:
+        name = LVS_VARIANTS[process][variant]
+    except KeyError:
+        raise ValueError("Unknown LVS comparison") from None
+    path = verified_artifact(process, run_id, name)
+    content = path.read_text(errors="replace")
+    pair = lambda label: re.search(
+        rf"{re.escape(label)}:\s*(\d+)[^\n|]*\|\s*{re.escape(label)}:\s*(\d+)", content)
+    devices, nets = pair("Number of devices"), pair("Number of nets")
+    mismatches = [line.strip() for line in content.splitlines()
+                  if ("**Mismatch**" in line or "disconnected node:" in line
+                      or line.startswith(("Net:", "Instance:")))]
+    matched = "Final result: Circuits match uniquely." in content
+    return {"process": process, "run_id": run_id, "variant": variant,
+            "matched": matched, "devices": list(map(int, devices.groups())) if devices else None,
+            "nets": list(map(int, nets.groups())) if nets else None,
+            "mismatches": mismatches[:80], "report": name,
+            "report_sha256": digest(path)}
+
+
+def pex_data(process: str, run_id: str) -> dict:
+    name = ("connected/inverter_pex.spice" if process == "gf180"
+            else "inverter_pex.spice")
+    path = verified_artifact(process, run_id, name)
+    content = path.read_text(errors="replace")
+    top = re.search(r"(?ims)^\.subckt\s+inverter\s+([^\n]+)\n(.*?)^\.ends", content)
+    if not top:
+        raise ValueError("Extracted inverter subcircuit is missing")
+    capacitors = []
+    for line in top.group(2).splitlines():
+        fields = line.split()
+        if len(fields) != 4 or not fields[0].upper().startswith("C"):
+            continue
+        value = re.fullmatch(r"([0-9.eE+-]+)([fpnum]?)", fields[3])
+        if not value:
+            continue
+        factor = {"f": 1, "p": 1000, "n": 1e6, "u": 1e9, "m": 1e12, "": 1e15}
+        capacitors.append({"name": fields[0], "a": fields[1], "b": fields[2],
+                           "ff": round(float(value[1]) * factor[value[2]], 6)})
+    checks = json.loads((run_path(process, run_id) / "report.json").read_text()).get("checks", {})
+    baseline = checks.get("baseline") or checks.get("schematic_simulation") or {}
+    extracted = checks.get("capacitance_extracted") or checks.get("capacitance_extracted_simulation") or {}
+    return {"process": process, "run_id": run_id, "netlist": name,
+            "netlist_sha256": digest(path), "ports": top.group(1).split(),
+            "capacitors": capacitors, "top_total_ff": round(sum(c["ff"] for c in capacitors), 6),
+            "all_capacitor_count": sum(bool(re.match(r"^C\S+\s", line, re.I))
+                                       for line in content.splitlines()),
+            "resistor_count": sum(bool(re.match(r"^R\S+\s", line, re.I))
+                                  for line in content.splitlines()),
+            "delay_delta_ps": {key: round((extracted[key] - baseline[key]) * 1e12, 4)
+                               for key in ("tphl", "tplh") if key in extracted and key in baseline},
+            "scope": "Magic capacitance extraction; no distributed wire resistance"}
+
+
+def open_klayout(process: str, run_id: str, variant: str) -> dict:
+    gds, rdb = variant_files(process, run_id, variant)
+    executable = shutil.which("klayout")
+    if not executable:
+        raise ValueError("Native KLayout is not installed")
+    pdk = PROCESSES[process]["pdk"]
+    lyp_name = "sky130A.lyp" if process == "sky130" else "gf180mcu.lyp"
+    lyp = PDK_ROOT / pdk / "libs.tech" / "klayout" / "tech" / lyp_name
+    if not lyp.is_file():
+        raise ValueError("PDK layer display file is missing")
+    command = [executable, "-e", "-l", str(lyp), str(gds), "-m", str(rdb)]
+    process_handle = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL,
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                      start_new_session=True)
+    return {"pid": process_handle.pid, "variant": variant,
+            "layout": str(gds), "markers": str(rdb)}
+
+
+def schematic_source(process: str) -> Path:
+    if process not in PROCESSES:
+        raise ValueError("Unknown process")
+    path = ROOT / "examples" / PROCESSES[process]["folder"] / "inverter.sch"
+    if not path.is_file():
+        raise ValueError("Editable Xschem source is missing")
+    return path
+
+
+def schematic_data(process: str) -> dict:
+    source = schematic_source(process)
+    source_hash = digest(source)
+    base = RUNS / "dashboard" / "xschem" / process
+    with SCHEMATIC_LOCK:
+        base.mkdir(parents=True, exist_ok=True)
+        svg, netlist, manifest = (base / "inverter.svg", base / "inverter.spice",
+                                  base / "manifest.json")
+        previous = json.loads(manifest.read_text()) if manifest.is_file() else {}
+        if previous.get("source_sha256") != source_hash or not svg.is_file() or not netlist.is_file():
+            pdk = PROCESSES[process]["pdk"]
+            pdk_dir = f"/pdk/{pdk}/libs.tech/xschem"
+            args = ["docker", "compose", "run", "--rm",
+                    "-v", f"{PDK_ROOT}:/pdk:ro", "-v", f"{ROOT}:/workspace:ro",
+                    "-e", "PDK_ROOT=/pdk", "-e", f"PWD={pdk_dir}",
+                    "--workdir", pdk_dir, "--entrypoint", "xschem", "worker",
+                    "-n", "-x", "-q", "--svg", "--plotfile",
+                    f"/results/dashboard/xschem/{process}/inverter.svg",
+                    "--rcfile", f"{pdk_dir}/xschemrc", "-o",
+                    f"/results/dashboard/xschem/{process}",
+                    f"/workspace/examples/{PROCESSES[process]['folder']}/inverter.sch"]
+            result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True,
+                                    timeout=90, check=False)
+            (base / "xschem.log").write_text(result.stdout + result.stderr)
+            if result.returncode or not svg.is_file() or not netlist.is_file():
+                raise ValueError("Xschem export failed; inspect its local log")
+            if "<svg" not in svg.read_text()[:300] or "IS MISSING" in netlist.read_text():
+                raise ValueError("Xschem export is incomplete")
+            manifest.write_text(json.dumps({"source_sha256": source_hash,
+                                            "svg_sha256": digest(svg),
+                                            "netlist_sha256": digest(netlist)}, indent=2) + "\n")
+    text = netlist.read_text()
+    expected = ("XMN OUT IN VSS VSS", "XMP OUT IN VDD VDD")
+    recognized = all(part in text for part in expected)
+    return {"process": process, "source": str(source), "source_sha256": source_hash,
+            "preview_sha256": digest(svg), "netlist_sha256": digest(netlist),
+            "netlist": text, "recognized_inverter": recognized,
+            "native_editor_available": bool(shutil.which("xschem")),
+            "ngspice_executable_found": bool(shutil.which("ngspice")),
+            "spectre_executable_found": bool(shutil.which("spectre")),
+            "scope": "Editable Xschem source; existing validation runs use their pinned SPICE input"}
+
+
+def open_xschem(process: str) -> dict:
+    source = schematic_source(process)
+    executable = shutil.which("xschem")
+    if not executable:
+        raise ValueError("Native Xschem GUI is unavailable; XQuartz requires an administrator install")
+    pdk_dir = PDK_ROOT / PROCESSES[process]["pdk"] / "libs.tech" / "xschem"
+    env = dict(os.environ, PDK_ROOT=str(PDK_ROOT), PWD=str(pdk_dir))
+    handle = subprocess.Popen([executable, "--rcfile", str(pdk_dir / "xschemrc"),
+                               str(source)], cwd=pdk_dir, env=env,
+                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, start_new_session=True)
+    return {"pid": handle.pid, "source": str(source)}
+
+
+def simulate_schematic(payload: dict) -> dict:
+    process = payload.get("process")
+    data = schematic_data(process)
+    if payload.get("source_sha256") != data["source_sha256"]:
+        raise ValueError("Schematic changed since preview; refresh it first")
+    if not data["recognized_inverter"]:
+        raise ValueError("This exploratory runner supports the two-transistor inverter topology")
+    model = ("sky130_fd_pr__nfet_01v8", "sky130_fd_pr__pfet_01v8") if process == "sky130" else ("nfet_03v3", "pfet_03v3")
+    lines = data["netlist"].splitlines()
+    devices = []
+    for line in lines:
+        if line.startswith(("XMN ", "XMP ")):
+            devices.append(line)
+        elif line.startswith("+") and devices:
+            devices.append(line)
+    if (sum(line.startswith("XMN ") for line in devices) != 1 or
+            sum(line.startswith("XMP ") for line in devices) != 1 or
+            model[0] not in "\n".join(devices) or model[1] not in "\n".join(devices)):
+        raise ValueError("Generated devices do not match this process")
+    spec = PROCESSES[process]
+    library = (".lib /pdk/sky130A/libs.tech/ngspice/sky130.lib.spice tt"
+               if process == "sky130" else
+               ".include /pdk/gf180mcuD/libs.tech/ngspice/design.ngspice\n"
+               ".lib /pdk/gf180mcuD/libs.tech/ngspice/sm141064.ngspice typical")
+    deck = (f"* Exploratory simulation from Xschem source {data['source_sha256']}\n"
+            f"{library}\n.temp 25\n"
+            f"VVDD VDD 0 {spec['voltage']}\nVVSS VSS 0 0\n"
+            f"VIN IN 0 PULSE(0 {spec['voltage']} 1n 20p 20p 2n 4n)\n"
+            + "\n".join(devices) + "\nCLOAD OUT 0 5f\n"
+            ".control\nset wr_singlescale\nset wr_vecnames\n"
+            "tran 2p 12n\nwrdata waveform.txt v(IN) v(OUT)\n.endc\n.end\n")
+    experiment_id = str(uuid.uuid4())
+    base = RUNS / "dashboard" / "editor_runs" / experiment_id
+    base.mkdir(parents=True, mode=0o700)
+    source = base / "editor.spice"
+    source.write_text(deck)
+    args = ["docker", "compose", "run", "--rm", "-v", f"{PDK_ROOT}:/pdk:ro",
+            "-e", "PDK_ROOT=/pdk", "--workdir",
+            f"/results/dashboard/editor_runs/{experiment_id}", "--entrypoint",
+            "ngspice", "worker", "-b", "editor.spice"]
+    result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True,
+                            timeout=90, check=False)
+    (base / "ngspice.log").write_text(result.stdout + result.stderr)
+    wave = base / "waveform.txt"
+    if result.returncode or not wave.is_file():
+        raise ValueError(f"Editor experiment {experiment_id} failed; inspect its local ngspice log")
+    samples = read_waveform(wave)
+    manifest = {"id": experiment_id, "status": "exploratory", "process": process,
+                "schematic_sha256": data["source_sha256"],
+                "xschem_netlist_sha256": data["netlist_sha256"],
+                "deck_sha256": digest(source), "wave_sha256": digest(wave),
+                "supply_v": spec["voltage"], "load_ff": 5, "temp_c": 25}
+    (base / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    return {"manifest": manifest, "samples": samples}
+
+
+@lru_cache(maxsize=20)
+def layout_data(process: str, run_id: str, variant: str = "connected") -> dict:
     import klayout.db as db
 
-    base = run_path(process, run_id)
-    gds = (base / "connected" / "inverter.gds") if process == "gf180" else (base / "inverter.gds")
-    if not gds.is_file():
-        raise ValueError("This run has no connected GDS layout")
+    gds, _ = variant_files(process, run_id, variant)
     layout = db.Layout()
     layout.read(str(gds))
     tops = list(layout.top_cells())
@@ -361,6 +617,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def serve_schematic_svg(self, process: str) -> None:
+        schematic_data(process)
+        body = (RUNS / "dashboard" / "xschem" / process / "inverter.svg").read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/svg+xml")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlsplit(self.path)
         q = {key: values[0] for key, values in parse_qs(parsed.query).items()}
@@ -387,7 +655,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, {"name": name,
                                         "text": (ROOT / name).read_text()})
             if parsed.path == "/api/layout":
-                return self.reply(200, layout_data(q["process"], q["run"]))
+                return self.reply(200, layout_data(q["process"], q["run"],
+                                                   q.get("variant", "connected")))
+            if parsed.path == "/api/drc":
+                return self.reply(200, drc_data(q["process"], q["run"],
+                                                q.get("variant", "connected")))
+            if parsed.path == "/api/lvs":
+                return self.reply(200, lvs_data(q["process"], q["run"],
+                                                q.get("variant", "connected")))
+            if parsed.path == "/api/pex":
+                return self.reply(200, pex_data(q["process"], q["run"]))
+            if parsed.path == "/api/schematic":
+                return self.reply(200, schematic_data(q["process"]))
+            if parsed.path == "/api/schematic.svg":
+                return self.serve_schematic_svg(q["process"])
             if parsed.path == "/api/waveform":
                 return self.reply(200, waveform_data(q["process"], q["run"], q["kind"]))
             if parsed.path == "/api/job":
@@ -415,6 +696,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, experiment_data(payload))
             if self.path == "/api/validate":
                 return self.reply(202, {"job_id": start_validation(payload.get("process"))})
+            if self.path == "/api/open-klayout":
+                return self.reply(200, open_klayout(payload.get("process"),
+                                                    payload.get("run"),
+                                                    payload.get("variant", "connected")))
+            if self.path == "/api/open-xschem":
+                return self.reply(200, open_xschem(payload.get("process")))
+            if self.path == "/api/simulate-schematic":
+                return self.reply(200, simulate_schematic(payload))
             return self.reply(404, {"error": "Unknown action"})
         except (ValueError, KeyError, OSError, json.JSONDecodeError) as exc:
             return self.reply(400, {"error": str(exc)})
