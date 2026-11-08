@@ -11,7 +11,9 @@ manual gate routing, source and drain buses, and explicit substrate and well
 ties. It disables the generators' built-in gate contacts because those contacts
 violate metal rules in this pinned PDK. Magic full DRC and the native KLayout
 full deck report zero errors; Netgen uniquely matches the two-device,
-four-net schematic. A capacitance-extracted ngspice run follows. The report
+four-net schematic. Capacitance-only and distributed wire R-C ngspice runs
+follow. The R-C extractor flattens a private copy with the shared
+[`rcx.tcl`](../rcx.tcl); the connected layout and LVS netlist stay intact. The report
 hashes sources, deck and model trees, the worker image, and outputs.
 
 The negative controls expose two failure modes. `bad_pcell.tcl` uses the
@@ -40,5 +42,5 @@ adapted decks. The full run covers FEOL, BEOL, off-grid and connectivity rules;
 antenna and density were not run. Magic prints two unknown CIF layer warnings
 while loading its DRC style. Their effect on Magic rule coverage remains
 unresolved, so the independent KLayout full deck is mandatory here. The PEX
-comparison includes parasitic capacitance, not distributed wire resistance.
-This open PDK is not foundry-qualified.
+comparison now includes explicit wire resistors as well as capacitance. This
+open PDK is not foundry-qualified.

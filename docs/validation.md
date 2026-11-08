@@ -161,3 +161,34 @@ to reproduce checks and obtain local UUID reports.
 Not tested/configured: macOS/Apple Silicon execution, Homebrew GUI installation,
 R2 credentials/transfers, remote compute provisioning, foundry PDK models/decks,
 PCells, automatic routing, process-specific DRC/LVS/PEX or fabrication acceptance.
+
+## Distributed wire R-C extension on Mac, 2026-11-08
+
+The pinned arm64 worker's Magic 8.3.686 now runs a separate detailed R-C
+extraction on a private flattened copy of each connected inverter cell, using
+[`examples/rcx.tcl`](../examples/rcx.tcl). The procedure follows the
+[Magic 8.3 R-C extraction guide](https://www.opencircuitdesign.com/magic/howto.html):
+`extract do unique`, `extract do resistance`, then `ext2spice extresist on`.
+The minimum network-selection thresholds are zero and the resistor
+simplification setting is 1 mΩ. The original GDS, LVS netlist and
+capacitance-only PEX netlist are preserved. The R-C netlist and testbench are
+hash-listed in each UUID report; all listed artifact hashes were verified.
+
+| PDK and run | Explicit R / C | C-only tPHL / tPLH | R-C tPHL / tPLH | R-C increment |
+| --- | ---: | ---: | ---: | ---: |
+| SKY130A `61dff494-ef22-4cbb-a9c8-6d069f581a8f` | 42 / 20 | 24.91 / 30.26 ps | 27.67 / 34.93 ps | +2.76 / +4.67 ps |
+| GF180MCU D `bb8567ef-7ea6-4385-af9d-965561489f87` | 11 / 13 | 44.04 / 45.61 ps | 44.93 / 46.86 ps | +0.89 / +1.24 ps |
+
+Both full pipeline reports passed on the native arm64 Mac. Magic emitted
+four extracted nets in each R-C run, the netlists contain positive explicit
+resistors, ngspice passed the same logic and delay criteria, and all evidence
+files match their SHA-256 manifests. Direct Netgen comparison against the
+R-C netlist reports extra resistor devices, so the original resistor-free
+extraction remains the LVS reference. A separate graph check collapses only
+positive resistor edges and verifies that both MOS transistors retain the
+expected four-port topology; short and wrong-terminal controls reject bad
+netlists. The numerical differences combine the
+wire resistance network and Magic's re-extracted capacitance from a flattened
+cell; they do not isolate resistance alone. These results are open-PDK
+engineering estimates. Antenna/density, foundry qualification and silicon
+measurement remain open. GF180 Magic still emits unknown CIF layer warnings.

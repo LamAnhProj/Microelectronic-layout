@@ -9,8 +9,10 @@ within that bound; measured values are recorded separately.
 
 The reference is [`schematic.spice`](schematic.spice). The deterministic
 [`layout.tcl`](layout.tcl) uses the pinned SKY130A Magic generators, makes
-physical source and bulk ties, and writes GDS plus LVS and capacitance
-extraction netlists. [`run.py`](run.py) executes the worker checks, native Mac
+physical source and bulk ties, and writes GDS plus LVS and capacitance-only
+extraction netlists. The shared [`rcx.tcl`](../rcx.tcl) flattens a private copy
+of the saved layout, extracts explicit wire resistors, and writes a separate
+R-C netlist. [`run.py`](run.py) executes the worker checks, native Mac
 KLayout DRC, and deliberate DRC/LVS failures. It keeps UUID run reports under
 ignored `runs/sky130_inverter/`.
 
@@ -29,7 +31,9 @@ ignored by Git and mounted read-only in the offline worker. The runner records
 aggregate hashes of the active Magic, Netgen, ngspice and KLayout deck/model
 trees, because the generic circuit manifest copies only declared source files.
 
-The post-layout comparison includes extracted capacitance and device geometry.
-It does not establish full distributed wire RC accuracy, Xschem GUI operation,
-foundry process qualification, or silicon performance. See
+The post-layout comparison includes both capacitance-only and distributed
+wire R-C networks. The R-C run uses zero selection thresholds and a 1 mΩ
+minimum resistor simplification setting; the accepted netlist must contain
+explicit positive resistors and pass ngspice measurements. It does not
+establish foundry-qualified parasitics or silicon performance. See
 [`docs/validation.md`](../../docs/validation.md) for the run and observed gaps.

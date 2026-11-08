@@ -22,6 +22,8 @@ import xml.etree.ElementTree as ET
 
 PIN = "c6d73a35f524070e85faff4a6a9eef49553ebc2b"
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "examples"))
+from rcx_validate import validate_rcx
 SOURCE = Path(__file__).resolve().parent
 PDK_MOUNT = ROOT / "pdks" / "volare"
 PDK = PDK_MOUNT / "gf180mcuD"
@@ -112,12 +114,14 @@ def main() -> None:
         "status": "failed", "run": str(RUN), "pdk": "gf180mcuD",
         "pdk_pin": PIN, "host": {"system": platform.system(),
                                    "arch": platform.machine()},
-        "scope": "open-PDK inverter check; no foundry signoff; capacitance extraction only",
+        "scope": "open-PDK inverter check; capacitance-only and distributed wire R-C extraction; no foundry signoff",
         "checks": {}, "unresolved": []}
     try:
         for name in ("inverter.spice", "schematic.spice", "layout.tcl",
                      "disconnected_probe.tcl", "bad_pcell.tcl", "run.py"):
             shutil.copyfile(SOURCE / name, RUN / name)
+        shutil.copyfile(ROOT / "examples" / "rcx.tcl", RUN / "rcx.tcl")
+        shutil.copyfile(ROOT / "examples" / "rcx_validate.py", RUN / "rcx_validate.py")
         report["source_sha256"] = {p.name: sha256(p) for p in RUN.iterdir()
                                    if p.is_file() and p.suffix in {".spice", ".tcl", ".py"}}
         report["pdk_sha256"] = {
@@ -186,6 +190,39 @@ def main() -> None:
                            "postlayout.spice")
         report["checks"]["capacitance_extracted_simulation"] = measure(extracted)
 
+        # Flatten only a private copy; the connected layout and LVS files stay
+        # tied to their original geometry and remain available as evidence.
+        rcx_dir = RUN / "connected" / "rcx"
+        rcx_dir.mkdir()
+        for cell in (RUN / "connected").glob("*.mag"):
+            shutil.copyfile(cell, rcx_dir / cell.name)
+        shutil.copyfile(RUN / "rcx.tcl", rcx_dir / "rcx.tcl")
+        rcx_log = worker("magic_rcx", "magic", "connected/rcx", "-dnull",
+                         "-noconsole", "-rcfile", rc,
+                         stdin=(rcx_dir / "rcx.tcl").read_text())
+        if not re.search(r"Total Nets: 4\s+Nets extracted: 4 .*?\s+Nets output: 4",
+                         rcx_log):
+            raise RuntimeError("Magic did not extract all four R-C nets")
+        rcx_netlist = rcx_dir / "inverter_rcx.spice"
+        if not (rcx_dir / "inverter.res.ext").is_file() or not rcx_netlist.is_file():
+            raise RuntimeError("Magic did not produce the R-C annotation and SPICE netlist")
+        rcx_text = rcx_netlist.read_text()
+        topology = validate_rcx(rcx_text, ("IN", "OUT", "VSS", "VDD"), {
+            "nfet_03v3": ("OUT", "IN", "VSS", "VSS"),
+            "pfet_03v3": ("OUT", "IN", "VDD", "VDD"),
+        })
+        report["checks"]["rc_network"] = {
+            **topology, "port_topology": "two MOS devices match four external nets",
+            "threshold_milliohm": 0, "mindelay_ps": 0, "minres_milliohm": 1,
+        }
+        rc_post = baseline_spice.replace(expected_devices,
+                                         "XINV in out 0 vdd inverter")
+        rc_post = rc_post.replace(".temp 25", ".include inverter_rcx.spice\n.temp 25")
+        (rcx_dir / "postlayout_rcx.spice").write_text(rc_post)
+        rc_sim = worker("postlayout_rcx", "ngspice", "connected/rcx", "-b",
+                        "postlayout_rcx.spice")
+        report["checks"]["rc_extracted_simulation"] = measure(rc_sim)
+
         bad_schematic = (RUN / "schematic.spice").read_text().replace(
             "XMP OUT IN VDD VDD", "XMP OUT IN VDD VSS")
         if bad_schematic == (RUN / "schematic.spice").read_text():
@@ -239,7 +276,7 @@ def main() -> None:
         report["unresolved"] = [
             "Vendor KLayout DRC requires a macOS logger adapter",
             "Antenna and density tables were not run on this small cell",
-            "Capacitance extraction excludes distributed wire resistance",
+            "Distributed R-C is Magic open-PDK extraction; not foundry-qualified signoff",
             "No foundry qualification or silicon measurement",
         ]
         if report["checks"]["magic_connected_unknown_cif_layers"]:

@@ -22,6 +22,8 @@ import xml.etree.ElementTree as ET
 
 PIN = "c6d73a35f524070e85faff4a6a9eef49553ebc2b"
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "examples"))
+from rcx_validate import validate_rcx
 SOURCE = Path(__file__).resolve().parent
 PDK_MOUNT = ROOT / "pdks" / "volare"
 PDK = PDK_MOUNT / "sky130A"
@@ -58,9 +60,10 @@ def command(name: str, args: list[str], *, stdin: str | None = None) -> str:
     return output
 
 
-def worker(name: str, program: str, *args: str, stdin: str | None = None) -> str:
+def worker(name: str, program: str, *args: str, stdin: str | None = None,
+           workdir: str = "") -> str:
     call = ["docker", "compose", "run", "--rm", "-v", f"{PDK_MOUNT}:/pdk:ro",
-            "-e", "PDK_ROOT=/pdk", "--workdir", CONTAINER_RUN,
+            "-e", "PDK_ROOT=/pdk", "--workdir", f"{CONTAINER_RUN}/{workdir}" if workdir else CONTAINER_RUN,
             "--entrypoint", program, "worker", *args]
     return command(name, call, stdin=stdin)
 
@@ -98,15 +101,17 @@ def main() -> None:
     report: dict = {"status": "failed", "run": str(RUN),
                     "host": {"system": platform.system(), "arch": platform.machine()},
                     "pdk_pin": PIN,
-                    "scope": "open-PDK lab check; no foundry signoff; capacitance extraction only",
+                    "scope": "open-PDK lab check; capacitance-only and distributed wire R-C extraction; no foundry signoff",
                     "checks": {}}
     try:
         for name in ("inverter.spice", "schematic.spice", "layout.tcl",
                      "design.json", "run.py"):
             shutil.copyfile(SOURCE / name, RUN / name)
+        shutil.copyfile(ROOT / "examples" / "rcx.tcl", RUN / "rcx.tcl")
+        shutil.copyfile(ROOT / "examples" / "rcx_validate.py", RUN / "rcx_validate.py")
         report["source_sha256"] = {name: sha256(RUN / name) for name in
                                    ("inverter.spice", "schematic.spice", "layout.tcl",
-                                    "design.json", "run.py")}
+                                    "design.json", "run.py", "rcx.tcl", "rcx_validate.py")}
         report["pdk_sha256"] = {
             "magic": tree_hash(PDK / "libs.tech" / "magic"),
             "netgen": tree_hash(PDK / "libs.tech" / "netgen"),
@@ -150,6 +155,44 @@ def main() -> None:
         (RUN / "postlayout.spice").write_text(post)
         extracted = worker("postlayout", "ngspice", "-b", "postlayout.spice")
         report["checks"]["capacitance_extracted"] = measure(extracted)
+
+        # Flatten only a private copy of the saved cell. Keep the original
+        # capacitance-only and LVS extraction outputs intact for comparison.
+        rcx_dir = RUN / "rcx"
+        rcx_dir.mkdir()
+        for cell in RUN.glob("*.mag"):
+            shutil.copyfile(cell, rcx_dir / cell.name)
+        shutil.copyfile(RUN / "rcx.tcl", rcx_dir / "rcx.tcl")
+        rcx_log = worker("magic_rcx", "magic", "-dnull", "-noconsole",
+                         "-rcfile", "/pdk/sky130A/libs.tech/magic/sky130A.magicrc",
+                         stdin=(rcx_dir / "rcx.tcl").read_text(), workdir="rcx")
+        require(r"Total Nets: 4\s+Nets extracted: 4 .*?\s+Nets output: 4", rcx_log,
+                "distributed R-C extraction")
+        rcx_netlist = rcx_dir / "inverter_rcx.spice"
+        if not (rcx_dir / "inverter.res.ext").is_file() or not rcx_netlist.is_file():
+            raise RuntimeError("Magic did not produce the R-C annotation and SPICE netlist")
+        rcx_text = rcx_netlist.read_text()
+        topology = validate_rcx(rcx_text, ("OUT", "IN", "VSS", "VDD"), {
+            "sky130_fd_pr__nfet_01v8": ("VSS", "IN", "OUT", "VSS"),
+            "sky130_fd_pr__pfet_01v8": ("VDD", "IN", "OUT", "VDD"),
+        })
+        report["checks"]["rc_network"] = {
+            **topology, "port_topology": "two MOS devices match four external nets",
+            "threshold_milliohm": 0, "mindelay_ps": 0, "minres_milliohm": 1,
+        }
+        rc_post = (RUN / "inverter.spice").read_text()
+        if rc_post.count("XMN out in 0 0 sky130_fd_pr__nfet_01v8 w=1 l=0.15\n"
+                         "XMP out in vdd vdd sky130_fd_pr__pfet_01v8 w=2 l=0.15") != 1:
+            raise RuntimeError("R-C testbench device substitution failed")
+        rc_post = rc_post.replace(
+            "XMN out in 0 0 sky130_fd_pr__nfet_01v8 w=1 l=0.15\n"
+            "XMP out in vdd vdd sky130_fd_pr__pfet_01v8 w=2 l=0.15",
+            "XINV out in 0 vdd inverter")
+        rc_post = rc_post.replace(".temp 25", ".include inverter_rcx.spice\n.temp 25")
+        (rcx_dir / "postlayout_rcx.spice").write_text(rc_post)
+        rc_sim = worker("postlayout_rcx", "ngspice", "-b", "postlayout_rcx.spice",
+                        workdir="rcx")
+        report["checks"]["rc_extracted"] = measure(rc_sim)
 
         deck = PDK / "libs.tech" / "klayout" / "drc" / "sky130A_mr.drc"
         command("klayout", [str(KLAYOUT), "-b", "-r", str(deck),
@@ -207,7 +250,8 @@ quit -noprompt
                 "negative LVS control")
         report["checks"]["negative_lvs"] = "mismatch detected"
 
-        report["evidence_sha256"] = {p.name: sha256(p) for p in RUN.iterdir()
+        report["evidence_sha256"] = {str(p.relative_to(RUN)): sha256(p)
+                                     for p in RUN.rglob("*")
                                      if p.is_file() and p.name != "report.json"}
         report["status"] = "passed"
     except Exception as exc:

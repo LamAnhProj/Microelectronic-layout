@@ -207,17 +207,32 @@ def lvs_data(process: str, run_id: str, variant: str) -> dict:
             "report_sha256": digest(path)}
 
 
-def pex_data(process: str, run_id: str) -> dict:
-    name = ("connected/inverter_pex.spice" if process == "gf180"
-            else "inverter_pex.spice")
+def pex_data(process: str, run_id: str, kind: str = "postlayout") -> dict:
+    if kind not in {"postlayout", "rcx"}:
+        raise ValueError("Unknown extraction kind")
+    if kind == "rcx":
+        name = ("connected/rcx/inverter_rcx.spice" if process == "gf180"
+                else "rcx/inverter_rcx.spice")
+    else:
+        name = ("connected/inverter_pex.spice" if process == "gf180"
+                else "inverter_pex.spice")
     path = verified_artifact(process, run_id, name)
     content = path.read_text(errors="replace")
     top = re.search(r"(?ims)^\.subckt\s+inverter\s+([^\n]+)\n(.*?)^\.ends", content)
     if not top:
         raise ValueError("Extracted inverter subcircuit is missing")
     capacitors = []
+    resistors = []
     for line in top.group(2).splitlines():
         fields = line.split()
+        if len(fields) == 4 and fields[0].upper().startswith("R"):
+            try:
+                value_ohm = float(fields[3])
+            except ValueError:
+                continue
+            if math.isfinite(value_ohm) and value_ohm > 0:
+                resistors.append({"name": fields[0], "a": fields[1],
+                                  "b": fields[2], "ohm": value_ohm})
         if len(fields) != 4 or not fields[0].upper().startswith("C"):
             continue
         value = re.fullmatch(r"([0-9.eE+-]+)([fpnum]?)", fields[3])
@@ -228,17 +243,24 @@ def pex_data(process: str, run_id: str) -> dict:
                            "ff": round(float(value[1]) * factor[value[2]], 6)})
     checks = json.loads((run_path(process, run_id) / "report.json").read_text()).get("checks", {})
     baseline = checks.get("baseline") or checks.get("schematic_simulation") or {}
-    extracted = checks.get("capacitance_extracted") or checks.get("capacitance_extracted_simulation") or {}
+    extracted = ((checks.get("rc_extracted") or checks.get("rc_extracted_simulation"))
+                 if kind == "rcx" else
+                 (checks.get("capacitance_extracted") or checks.get("capacitance_extracted_simulation"))) or {}
     return {"process": process, "run_id": run_id, "netlist": name,
-            "netlist_sha256": digest(path), "ports": top.group(1).split(),
+            "kind": kind, "netlist_sha256": digest(path), "ports": top.group(1).split(),
             "capacitors": capacitors, "top_total_ff": round(sum(c["ff"] for c in capacitors), 6),
+            "resistors": resistors,
             "all_capacitor_count": sum(bool(re.match(r"^C\S+\s", line, re.I))
                                        for line in content.splitlines()),
             "resistor_count": sum(bool(re.match(r"^R\S+\s", line, re.I))
                                   for line in content.splitlines()),
             "delay_delta_ps": {key: round((extracted[key] - baseline[key]) * 1e12, 4)
                                for key in ("tphl", "tplh") if key in extracted and key in baseline},
-            "scope": "Magic capacitance extraction; no distributed wire resistance"}
+            "scope": ("Magic flattened-cell R-C extraction with explicit wire resistors. "
+                      "Flattening also changes the extracted capacitance, so the delay "
+                      "difference from C-only is not resistance alone. This is open-PDK "
+                      "engineering evidence, not foundry signoff" if kind == "rcx"
+                      else "Magic capacitance extraction; distributed wire resistance excluded")}
 
 
 def open_klayout(process: str, run_id: str, variant: str) -> dict:
@@ -437,15 +459,19 @@ def layout_data(process: str, run_id: str, variant: str = "connected") -> dict:
 
 
 def trace_netlist(process: str, run_id: str, kind: str, target: Path) -> str:
-    if kind not in {"schematic", "postlayout"}:
+    if kind not in {"schematic", "postlayout", "rcx"}:
         raise ValueError("Unknown waveform kind")
     source = verified_artifact(process, run_id, "inverter.spice").read_text()
     lines = [line for line in source.splitlines()
              if not line.lower().startswith((".tran", ".meas", ".end"))]
-    if kind == "postlayout":
-        pex_name = "connected/inverter_pex.spice" if process == "gf180" else "inverter_pex.spice"
+    if kind in {"postlayout", "rcx"}:
+        pex_name = (("connected/rcx/inverter_rcx.spice" if process == "gf180"
+                     else "rcx/inverter_rcx.spice") if kind == "rcx" else
+                    ("connected/inverter_pex.spice" if process == "gf180"
+                     else "inverter_pex.spice"))
         pex = verified_artifact(process, run_id, pex_name)
-        shutil.copyfile(pex, target / "inverter_pex.spice")
+        local_pex = "inverter_rcx.spice" if kind == "rcx" else "inverter_pex.spice"
+        shutil.copyfile(pex, target / local_pex)
         if process == "gf180":
             prefixes = ("XMN out", "XMP out")
             replacement = "XINV in out 0 vdd inverter"
@@ -456,7 +482,7 @@ def trace_netlist(process: str, run_id: str, kind: str, target: Path) -> str:
         if len(found) != 2:
             raise ValueError("Cannot identify the two inverter devices")
         lines = [line for line in lines if not line.startswith(prefixes)]
-        lines.extend([".include inverter_pex.spice", replacement])
+        lines.extend([f".include {local_pex}", replacement])
     lines.extend([".control", "set wr_singlescale", "set wr_vecnames",
                   "tran 2p 12n", "wrdata waveform.txt v(in) v(out)",
                   ".endc", ".end"])
@@ -506,7 +532,7 @@ def waveform_data(process: str, run_id: str, kind: str) -> dict:
     with TRACE_LOCK:
         base.mkdir(parents=True, exist_ok=True)
         netlist = trace_netlist(process, run_id, kind, base)
-        pex = base / "inverter_pex.spice"
+        pex = base / ("inverter_rcx.spice" if kind == "rcx" else "inverter_pex.spice")
         fingerprint = hashlib.sha256((netlist + (digest(pex) if pex.is_file() else "")
                                       + simulator_engine()).encode()).hexdigest()
         metadata = base / "manifest.json"
@@ -700,7 +726,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, lvs_data(q["process"], q["run"],
                                                 q.get("variant", "connected")))
             if parsed.path == "/api/pex":
-                return self.reply(200, pex_data(q["process"], q["run"]))
+                return self.reply(200, pex_data(q["process"], q["run"],
+                                                q.get("kind", "postlayout")))
             if parsed.path == "/api/schematic":
                 return self.reply(200, schematic_data(q["process"]))
             if parsed.path == "/api/schematic.svg":

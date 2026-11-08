@@ -46,16 +46,18 @@ tests, separate from the hashed full pipeline runs.
 Click any **Pipeline checkpoint** on the home page to inspect its measured
 status, source or report files and recorded SHA-256 hashes. The popup can read
 text evidence or open the related view. In **Waveforms**, the V(IN) and V(OUT)
-checkboxes control each trace independently. Selecting **Post-layout** shows
-the extracted simulation and selects its testbench below the plot.
+checkboxes control each trace independently. Select **C only** or **Wire R-C**
+to compare the two extracted simulations and their testbenches below the plot.
 
 The pinned schematic testbench is `inverter.spice` in each selected run. The
-post-layout testbench is `postlayout.spice` for SKY130 and
-`connected/postlayout.spice` for GF180. The **Testbench used for this run**
+capacitance-only testbench is `postlayout.spice` for SKY130 and
+`connected/postlayout.spice` for GF180. The R-C testbench is
+`rcx/postlayout_rcx.spice` or `connected/rcx/postlayout_rcx.spice`.
+The **Testbench used for this run**
 panel gives the exact local path and deck text. The post-layout deck retains
 the input pulse, supply, 5 fF load, temperature and model corner, includes
-`inverter_pex.spice`, and substitutes an `XINV` instance for the two schematic
-devices. The original run deck uses worker mount paths; the dashboard writes
+the selected extracted inverter subcircuit, and substitutes an `XINV` instance
+for the two schematic devices. The original run deck uses worker mount paths; the dashboard writes
 a Mac-local adapted trace deck under `runs/dashboard/traces/` when it displays
 a waveform. These trace replays are exploratory views of the pinned evidence;
 the full pipeline runner remains the validated measurement source.
@@ -90,12 +92,13 @@ structured comparison and full text are the GUI for the actual Netgen result.
 
 ## PEX
 
-The **PEX** view reads the extracted `inverter_pex.spice` from the selected
-UUID run, shows top-level capacitors and their node pairs, and compares
-post-layout delays against the schematic testbench. The full extracted SPICE
-is visible and copyable. The result is Magic capacitance extraction. It has
-no distributed wire resistance, so the displayed delay penalty is not a full
-RC signoff estimate.
+The **PEX** view switches between `inverter_pex.spice` (capacitance only) and
+`rcx/inverter_rcx.spice` (distributed wire R-C; under `connected/` for GF180).
+It shows the top-level capacitors or resistor segments and their node pairs,
+and compares each delay against the same schematic testbench. The full
+extracted SPICE is visible and copyable. Magic flattens a private copy of the
+connected cell for R-C extraction; original LVS and GDS evidence stay intact.
+The R-C result is open-PDK engineering evidence, not foundry signoff.
 
 ## Spectre
 

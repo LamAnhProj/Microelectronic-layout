@@ -26,25 +26,26 @@ tests by showing the Mac run report's `Darwin` and `arm64` host fields.
 
 Click any home-page pipeline checkpoint to inspect its metrics, artifact hashes
 and recorded files. The waveform view can show V(IN), V(OUT), both or neither.
-It reruns ngspice from the selected run's reference or capacitance-extracted
-netlist and saves traces under `runs/dashboard/traces/`. The testbench panel
-shows the selected UUID's original `inverter.spice` or `postlayout.spice`.
+It reruns ngspice from the selected run's schematic, capacitance-only, or
+distributed wire R-C netlist and saves traces under `runs/dashboard/traces/`.
+The testbench panel shows the selected UUID's exact SPICE deck for each mode.
 Crossing delays are read from the validated report, rather than estimated from
 the displayed sampled curve. The GDS view is a read-only polygon viewer. For
 mask-level editing and signoff review, open the GDS in native KLayout.
 
 The **DRC / LVS** view now parses KLayout marker coordinates and Netgen
 comparisons, including GF180's deliberate failing controls. **PEX** displays
-the extracted capacitor network and full netlist. **Schematic** shows the
+the capacitor network, explicit wire resistors, and full netlist for RC runs.
+**Schematic** shows the
 actual PDK symbols rendered from editable Xschem source and can launch native
 Xschem. It can run a separate exploratory transient from that source. See
 [the GUI workflow](../docs/gui-workflow.md) for
 the exact tool boundaries and steps.
 
 The current evidence covers schematic simulation, connected layout, Magic and
-native KLayout DRC, Netgen LVS, and capacitance extraction for the two inverter
-cells. It does not cover antenna or density signoff, distributed wire
-resistance, foundry qualification, or silicon measurement. R2 is storage;
+native KLayout DRC, Netgen LVS, capacitance-only extraction, and flattened-cell
+distributed wire R-C extraction for the two inverter cells. It does not cover
+antenna or density signoff, foundry qualification, or silicon measurement. R2 is storage;
 remote compute remains unfinished.
 
 The server uses Python's standard library and the repository's existing
