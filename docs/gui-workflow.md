@@ -5,6 +5,17 @@ Open the local dashboard at <http://127.0.0.1:8765>. Select **SKY130A** or
 specific UUID; its report records `Darwin`/`arm64`, source hashes, PDK revision
 and tool evidence. Earlier cloud tests are separate evidence.
 
+## Circuit library
+
+Use the top **Circuit** dropdown to select the validated CMOS inverter or the
+nine-bit RC ring oscillator (RCO). The RCO page is a schematic-stage prototype:
+three CMOS inverters, three 470 kΩ delay resistors, a 0.5 pF base capacitor and
+nine-bit switched bank at each stage, 1.8 V digital controls, and output
+buffers. Choose a saved code or run a new code from 0 to 511. The waveform,
+actual SPICE deck, model hash, and design log show the measured adjustment.
+RCO layout, DRC/LVS, and PEX are still open; the other workflow tabs continue
+to show the inverter's validated evidence.
+
 ## Schematic editor
 
 The source schematics are

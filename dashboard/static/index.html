@@ -14,6 +14,7 @@
       <div class="brand"><div class="brand-mark">◈</div><div><strong>CHIP LAB</strong><span>LOCAL WORKBENCH</span></div></div>
       <div class="sidebar-label">WORKSPACE</div>
       <nav id="nav">
+        <button class="nav-item" data-view="rco"><span>▧</span> Circuit library</button>
         <button class="nav-item active" data-view="overview"><span>◫</span> Overview</button>
         <button class="nav-item" data-view="waveforms"><span>〰</span> Waveforms</button>
         <button class="nav-item" data-view="schematic"><span>⌁</span> Schematic</button>
@@ -33,8 +34,9 @@
       <header class="topbar">
         <div class="breadcrumbs">LAB <span>/</span> <b id="view-crumb">OVERVIEW</b></div>
         <div class="top-controls">
+          <label class="select-wrap">CIRCUIT <select id="circuit-select" aria-label="Circuit library"><option value="inverter">CMOS inverter</option><option value="rco">Nine-bit RCO</option></select></label>
           <label class="select-wrap">PROCESS <select id="process-select" aria-label="Process"></select></label>
-          <label class="select-wrap">RUN <select id="run-select" aria-label="Validation run"></select></label>
+          <label class="select-wrap" id="inverter-run-control">RUN <select id="run-select" aria-label="Validation run"></select></label>
           <span class="host-pill">● 127.0.0.1</span>
         </div>
       </header>
@@ -54,6 +56,16 @@
             <div class="panel"><div class="panel-heading"><h3>Pipeline checkpoints</h3><span class="small-muted">source → silicon model</span></div><div id="pipeline" class="pipeline"></div></div>
             <div class="panel"><div class="panel-heading"><h3>Interpretation</h3><span class="small-muted">scope and limits</span></div><div id="interpretation" class="interpretation"></div></div>
           </div>
+        </section>
+
+        <section class="view" id="view-rco">
+          <div class="page-heading"><div><div class="eyebrow">CIRCUIT LIBRARY / 02</div><h1>Nine-bit RC ring oscillator</h1><p>Three CMOS inverters, resistive RC delay, three switched capacitor banks, 1.8 V controls, and a buffered clock output. Target: 512 kHz.</p></div><span class="chip">SCHEMATIC PROTOTYPE</span></div>
+          <div class="rco-topology" aria-label="Three stage ring oscillator topology"><div class="rco-stage"><strong>INV 0</strong><span>PMOS + NMOS</span><em>470 kΩ → RC0</em></div><span class="rco-arrow">→</span><div class="rco-stage"><strong>INV 1</strong><span>PMOS + NMOS</span><em>470 kΩ → RC1</em></div><span class="rco-arrow">→</span><div class="rco-stage"><strong>INV 2</strong><span>PMOS + NMOS</span><em>470 kΩ → RC2</em></div><span class="rco-arrow">→</span><div class="rco-stage output"><strong>BUFFER × 2</strong><span>taps INV 2 output</span><em>CLK_OUT → 1 pF</em></div></div><p class="form-note">Feedback: RC2 returns to the input of INV 0. The output buffers branch from INV 2 and are outside the ring.</p>
+          <div class="two-col"><div class="panel"><div class="panel-heading"><h3>What each block does</h3></div><div class="parameter-list"><div class="parameter-row"><span>Ring</span><span>3 inverting CMOS stages</span></div><div class="parameter-row"><span>Delay resistor</span><span>470 kΩ per stage</span></div><div class="parameter-row"><span>Base capacitor</span><span>0.5 pF per stage</span></div><div class="parameter-row"><span>Capacitor trimmer</span><span>9 binary bits × 5 fF unit, on each stage</span></div><div class="parameter-row"><span>Master switch</span><span>PMOS + NMOS transmission gate per stage</span></div><div class="parameter-row"><span>Level shifters</span><span>GF: 1.8→3.3 V; SKY: 1.8 V restoration</span></div><div class="parameter-row"><span>Output buffers</span><span>2 CMOS inverters</span></div><div class="parameter-row"><span>Prototype scale</span><span>130 MOS · 30 circuit capacitors</span></div></div></div><div class="panel"><div class="panel-heading"><h3>Target and model</h3></div><div id="rco-metrics" class="detail-grid"></div><p id="rco-scope" class="form-note"></p></div></div>
+          <div class="panel"><div class="panel-heading"><div><div class="eyebrow">NINE-BIT CONTROL</div><h3>Simulate a trim setting</h3></div><select id="rco-run-select" aria-label="Saved RCO simulation"></select></div><div class="rco-controls"><label>Code (0–511) <input id="rco-code" type="number" min="0" max="511" step="1" value="169"></label><label><input id="rco-main" type="checkbox" checked> Main capacitor switch on</label><button id="rco-run-button" class="button primary">Run native ngspice</button><span id="rco-run-status" class="small-muted">Select a code to test the frequency.</span></div><p class="form-note">Static control levels are held for each run. Switching them during oscillation needs a separate glitch and settling test.</p></div>
+          <div class="panel plot-panel"><div class="panel-heading"><h3>Late-cycle waveform</h3><div class="signal-toggles" role="group" aria-label="RCO waveform signals"><label><input type="checkbox" data-rco-signal="1" checked> RC0</label><label><input type="checkbox" data-rco-signal="2" checked> RC1</label><label><input type="checkbox" data-rco-signal="3" checked> RC2</label><label><input type="checkbox" data-rco-signal="4" checked> CLK_OUT</label></div></div><div class="plot-wrap"><canvas id="rco-canvas" aria-label="RCO voltages over time"></canvas></div><div class="plot-footer"><span id="rco-wave-source">—</span><span>Time in µs · Voltage in V</span></div></div>
+          <div class="panel"><div class="panel-heading"><div><div class="eyebrow">ENGINEERING DECISION LOG</div><h3>How the design moved toward 512 kHz</h3></div></div><div id="rco-design-log" class="analysis-body"></div><p class="form-note">The estimates explain the starting values. Each measured frequency comes from a saved, hashed ngspice run on this Mac.</p></div>
+          <div class="panel"><div class="panel-heading"><h3>Exact testbench and evidence</h3></div><p id="rco-run-path" class="source-path mono"></p><details class="report-details"><summary>Read this run's SPICE netlist</summary><pre id="rco-netlist" class="code-block"></pre></details><p class="form-note">The PDK MOS devices are modeled. Resistors and capacitors remain ideal elements pending physical device selection, layout, DRC/LVS, and PEX. The 1 GΩ bleeders anchor disconnected nodes in simulation; they are not proposed physical resistors.</p></div>
         </section>
 
         <section class="view" id="view-waveforms">

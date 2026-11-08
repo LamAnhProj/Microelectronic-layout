@@ -65,6 +65,16 @@ Polygon changes are geometric differences, not automatically DRC violations
 or net changes. Each comparison requires matching PDK/rule, schematic,
 testbench and extraction-script hashes and verifies both GDS artifact hashes.
 
+The **Circuit** dropdown switches between the validated inverter pipeline and
+the nine-bit RCO schematic prototype. The **Circuit library** page shows the
+RCO topology, capacitor word, master PMOS/NMOS switch, 512 kHz target, saved
+Mac ngspice waveform, exact hashed deck, and a step-by-step engineering
+decision log. Select a saved run or enter a new 0–511 code and use **Run native
+ngspice**. The process dropdown changes between SKY130A and GF180MCU D; the
+GF180 oscillator supply is 3.3 V and its control inputs are 1.8 V. RCO
+resistors and capacitors are ideal SPICE elements at this stage. Its schematic
+layout, DRC/LVS, and PEX are not yet represented by the inverter pages.
+
 The **DRC / LVS** view now parses KLayout marker coordinates and Netgen
 comparisons, including GF180's deliberate failing controls. **PEX** displays
 the capacitor network, explicit wire resistors, and full netlist for RC runs.

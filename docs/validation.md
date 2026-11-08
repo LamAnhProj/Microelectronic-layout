@@ -300,3 +300,31 @@ separately. These counts are not a Boolean XOR area or a DRC result. The
 two canvases share a µm coordinate frame and zoom/pan, and a click compares
 visible layer membership at the same point in each snapshot. The previously
 recorded full DRC, LVS and transient reports remain the electrical evidence.
+
+### Nine-bit RCO schematic prototype
+
+The second library circuit is a three-stage RC ring oscillator with a nine-bit
+switched capacitor bank on each stage, one shared control word, a master
+PMOS/NMOS transmission gate per bank, 1.8 V control inputs, and two output
+buffers. It targets 512 kHz. This is a **separate schematic-stage experiment**,
+not an extension of the inverter's layout validation.
+
+Native ngspice 47 ran on the arm64 Mac at 25 °C with pinned SKY130A `tt` and
+GF180MCU D `typical` MOS model trees. The latest nominal reports record
+source, netlist, model-tree, log, and waveform SHA-256 hashes, late-cycle
+edge counts, period spread, duty cycle, and output swing:
+
+| Process | Oscillator supply | 1.8 V control code | Frequency | Error to 512 kHz | Duty |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| SKY130A | 1.8 V | 169 | 511.112 kHz | −0.173% | 49.29% |
+| GF180MCU D | 3.3 V | 141 | 511.047 kHz | −0.186% | 48.82% |
+
+The three 470 kΩ resistors and 30 circuit capacitors are ideal SPICE elements.
+GF180's 1.8 V controls are translated to the 3.3 V ring domain by a simulated
+cross-coupled level shifter. Turning the bank off raised frequency to 1.373
+MHz (SKY130) and 1.273 MHz (GF180), showing the master switch acts on the
+load. This is nominal simulation evidence only. Physical passive devices,
+layout, DRC/LVS, PEX, process corners, temperature range, calibration DNL/INL,
+power, and silicon measurement remain unverified. The lab keeps the generated
+decks and reports under ignored `runs/rco/<uuid>/` folders; see
+`examples/rco/README.md` for the design rationale.

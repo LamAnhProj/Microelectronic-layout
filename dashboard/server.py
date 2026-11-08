@@ -79,7 +79,7 @@ DOCS = [
     "docs/CONTINUE-SETUP.md", "docs/publish-from-mac.md",
     "knowledge/circuit-reasoning.md", "knowledge/layout-judgment.md",
     "knowledge/debug-and-evidence.md", "examples/sky130_inverter/README.md",
-    "examples/gf180_inverter/README.md",
+    "examples/gf180_inverter/README.md", "examples/rco/README.md",
 ]
 JOBS: dict[str, dict] = {}
 JOB_LOCK = threading.Lock()
@@ -140,6 +140,89 @@ def run_list(process: str) -> list[dict]:
             except (OSError, json.JSONDecodeError):
                 continue
     return sorted(results, key=lambda item: item["modified"], reverse=True)
+
+
+def rco_data(process: str, selected_run: str | None = None) -> dict:
+    """Read hashed local RCO schematic simulations; no layout claim is implied."""
+    if process not in PROCESSES:
+        raise ValueError("Unknown RCO process")
+    if selected_run is not None and not UUID.fullmatch(selected_run):
+        raise ValueError("Invalid RCO run ID")
+    folder = RUNS / "rco"
+    runs = []
+    if folder.is_dir():
+        for path in folder.iterdir():
+            if not path.is_dir() or not UUID.fullmatch(path.name):
+                continue
+            report_file, netlist, waveform = (path / "report.json", path / "rco.spice",
+                                              path / "waveform.dat")
+            if not report_file.is_file() or not netlist.is_file() or not waveform.is_file():
+                continue
+            try:
+                report = json.loads(report_file.read_text())
+                if (report.get("process") != process or
+                        report.get("status") != "simulated" or
+                        report.get("netlist_sha256") != digest(netlist) or
+                        (report.get("waveform_sha256") and
+                         report["waveform_sha256"] != digest(waveform))):
+                    continue
+                values = report["measurements"]
+                runs.append({"id": path.name, "code": int(report["code"]),
+                             "main": bool(report["main"]),
+                             "frequency_hz": float(values["frequency_hz"]),
+                             "frequency_error_pct": float(values["frequency_error_pct"]),
+                             "vhigh_v": float(values["vhigh_v"]),
+                             "vlow_v": float(values["vlow_v"]),
+                             "period_s": float(values["period_s"]),
+                             "duty_cycle_pct": (float(values["duty_cycle_pct"])
+                                                if "duty_cycle_pct" in values else None),
+                             "late_rising_edges": values.get("late_rising_edges"),
+                             "period_spread_pct": values.get("period_spread_pct"),
+                             "supply_v": float(report["supply_v"]),
+                             "control_v": float(report["control_v"]),
+                             "model_tree_sha256": report["model_tree_sha256"],
+                             "netlist_sha256": report["netlist_sha256"],
+                             "waveform_sha256": report.get("waveform_sha256"),
+                             "source_sha256": report["source_sha256"],
+                             "pdk_pin": report["pdk_pin"],
+                             "ngspice_version": report["ngspice_version"].splitlines()[1].strip(),
+                             "modified": report_file.stat().st_mtime})
+            except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError, IndexError):
+                continue
+    runs.sort(key=lambda item: item["modified"], reverse=True)
+    if not runs:
+        return {"process": process, "runs": [], "selected": None,
+                "scope": "No RCO schematic simulation has been recorded for this PDK."}
+    if selected_run:
+        selected = next((item for item in runs if item["id"] == selected_run), None)
+        if selected is None:
+            raise ValueError("RCO run not found for this process")
+    else:
+        candidates = [item for item in runs if item["main"]]
+        selected = min(candidates or runs,
+                       key=lambda item: abs(item["frequency_error_pct"]))
+    path = folder / selected["id"]
+    rows = []
+    for line in (path / "waveform.dat").read_text().splitlines()[1:]:
+        parts = line.split()
+        if len(parts) != 5:
+            continue
+        row = [float(value) for value in parts]
+        if all(math.isfinite(value) for value in row):
+            rows.append(row)
+    if not rows:
+        raise ValueError("RCO waveform is missing")
+    cutoff = max(0, rows[-1][0] - 12e-6)
+    rows = [row for row in rows if row[0] >= cutoff]
+    stride = max(1, math.ceil(len(rows) / 2400))
+    samples = [[round(row[0] * 1e6, 6), *[round(v, 6) for v in row[1:]]]
+               for row in rows[::stride]]
+    return {"process": process, "runs": runs, "selected": selected,
+            "samples": samples, "netlist": (path / "rco.spice").read_text(),
+            "run_path": str(path),
+            "scope": "Native arm64 Mac ngspice schematic simulation with pinned PDK MOS "
+                     "models and ideal resistors/capacitors. No RCO layout, DRC, LVS, "
+                     "PEX, corner sweep, or silicon measurement is recorded."}
 
 
 def report_data(process: str, run_id: str) -> dict:
@@ -905,6 +988,37 @@ def start_validation(process: str, layout_variant: str = "standard") -> str:
     return job_id
 
 
+def start_rco(process: str, code: object, main: object) -> str:
+    if process not in PROCESSES or type(code) is not int or not 0 <= code <= 511 or type(main) is not bool:
+        raise ValueError("Choose a process, a nine-bit code (0–511), and a main-switch state")
+    with JOB_LOCK:
+        if any(job["state"] == "running" for job in JOBS.values()):
+            raise ValueError("Another lab tool run is already in progress")
+        job_id = str(uuid.uuid4())
+        JOBS[job_id] = {"id": job_id, "kind": "rco", "process": process,
+                        "code": code, "main": main, "state": "running"}
+
+    def execute() -> None:
+        command = [sys.executable, str(ROOT / "examples" / "rco" / "run.py"), process,
+                   str(code)]
+        if not main:
+            command.append("--main-off")
+        try:
+            result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
+                                    timeout=240, check=False)
+            report = json.loads(result.stdout) if result.returncode == 0 else {}
+            passed = result.returncode == 0 and report.get("status") == "simulated"
+            JOBS[job_id].update({"state": "complete" if passed else "failed",
+                                 "report_status": report.get("status"),
+                                 "run_id": Path(report["run"]).name if passed else None,
+                                 "output": (report.get("error") or result.stderr or result.stdout)[-4000:]})
+        except Exception as exc:
+            JOBS[job_id].update({"state": "failed", "output": str(exc)})
+
+    threading.Thread(target=execute, daemon=True).start()
+    return job_id
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ChipLabDashboard/1.0"
 
@@ -957,6 +1071,8 @@ class Handler(BaseHTTPRequestHandler):
                                         "documents": DOCS})
             if parsed.path == "/api/run":
                 return self.reply(200, report_data(q["process"], q["run"]))
+            if parsed.path == "/api/rco":
+                return self.reply(200, rco_data(q["process"], q.get("run")))
             if parsed.path == "/api/artifact":
                 return self.reply(200, {"name": q["name"], "text":
                     artifact_text(q["process"], q["run"], q["name"])})
@@ -1020,6 +1136,9 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/validate":
                 return self.reply(202, {"job_id": start_validation(payload.get("process"),
                     payload.get("layout_variant", "standard"))})
+            if self.path == "/api/rco-simulate":
+                return self.reply(202, {"job_id": start_rco(payload.get("process"),
+                    payload.get("code"), payload.get("main"))})
             if self.path == "/api/open-klayout":
                 return self.reply(200, open_klayout(payload.get("process"),
                                                     payload.get("run"),
