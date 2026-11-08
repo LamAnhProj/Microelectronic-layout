@@ -192,3 +192,22 @@ wire resistance network and Magic's re-extracted capacitance from a flattened
 cell; they do not isolate resistance alone. These results are open-PDK
 engineering estimates. Antenna/density, foundry qualification and silicon
 measurement remain open. GF180 Magic still emits unknown CIF layer warnings.
+
+### Layout-linked R-C analysis
+
+The Chip Lab layout overlay now maps all extracted R-C node anchors onto the
+saved GDS coordinate frame. It derives the conversion from the four port boxes
+in the hashed `layout.tcl` and the matching port rectangles in the flattened
+`inverter.ext`, then verifies the `inverter.res.ext` nodes fall within the GDS
+bounds. It also checks each SPICE resistor against Magic's resistance
+annotation. The anchored links are electrical connections, not exact routed
+shapes or a per-layer resistance map.
+
+The branching resistor network gives these DC effective port-to-terminal
+resistances: SKY130 IN to NMOS/PMOS gate 387.59/563.60 Ω and OUT to
+NMOS/PMOS drain 90.08/120.26 Ω; GF180 IN to the gates 85.35/112.84 Ω and
+OUT to the drains 10.56/8.29 Ω. VDD/VSS branches and device bulk paths are
+also listed in the UI. These values characterize the extracted network at DC;
+they are not isolated timing penalties. The R-C netlists contain 6.428 fF
+(SKY130) and 5.811 fF (GF180) of top-level capacitors, including internal
+nodes, so a simple C-only versus R-C timing subtraction does not isolate R.

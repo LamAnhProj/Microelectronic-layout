@@ -22,6 +22,11 @@ import uuid
 from urllib.parse import parse_qs, urlsplit
 import xml.etree.ElementTree as ET
 
+try:
+    from .rc_layout import analyze_rc_layout
+except ImportError:  # Direct `python dashboard/server.py` launch.
+    from rc_layout import analyze_rc_layout
+
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = Path(__file__).resolve().parent / "static"
@@ -124,7 +129,7 @@ def report_data(process: str, run_id: str) -> dict:
     report = json.loads((path / "report.json").read_text())
     artifacts = []
     for name in report.get("evidence_sha256", {}):
-        if name.endswith((".spice", ".tcl", ".log", ".txt", ".xml", ".lyrdb")):
+        if name.endswith((".spice", ".tcl", ".log", ".txt", ".xml", ".lyrdb", ".ext")):
             artifacts.append(name)
     report["artifacts"] = sorted(artifacts)
     report["local_path"] = str(path)
@@ -134,7 +139,7 @@ def report_data(process: str, run_id: str) -> dict:
 def artifact_text(process: str, run_id: str, name: str) -> str:
     path = verified_artifact(process, run_id, name)
     if path.stat().st_size > 2_000_000 or not name.endswith(
-            (".spice", ".tcl", ".log", ".txt", ".xml", ".lyrdb")):
+            (".spice", ".tcl", ".log", ".txt", ".xml", ".lyrdb", ".ext")):
         raise ValueError("Artifact is not a small text file")
     return path.read_text(errors="replace")
 
@@ -458,6 +463,22 @@ def layout_data(process: str, run_id: str, variant: str = "connected") -> dict:
             "shape_count": shape_count, "gds_sha256": digest(gds)}
 
 
+def layout_rc_data(process: str, run_id: str) -> dict:
+    prefix = "connected/rcx/" if process == "gf180" else "rcx/"
+    source = verified_artifact(process, run_id, "layout.tcl")
+    flat = verified_artifact(process, run_id, prefix + "inverter.ext")
+    annotation = verified_artifact(process, run_id, prefix + "inverter.res.ext")
+    spice = verified_artifact(process, run_id, prefix + "inverter_rcx.spice")
+    gds = layout_data(process, run_id)
+    result = analyze_rc_layout(process, source.read_text(), flat.read_text(),
+                               annotation.read_text(), spice.read_text(), gds["bbox"])
+    result.update({"process": process, "run_id": run_id,
+                   "gds_sha256": gds["gds_sha256"],
+                   "source_sha256": digest(source), "flat_ext_sha256": digest(flat),
+                   "res_ext_sha256": digest(annotation), "spice_sha256": digest(spice)})
+    return result
+
+
 def trace_netlist(process: str, run_id: str, kind: str, target: Path) -> str:
     if kind not in {"schematic", "postlayout", "rcx"}:
         raise ValueError("Unknown waveform kind")
@@ -719,6 +740,8 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/layout":
                 return self.reply(200, layout_data(q["process"], q["run"],
                                                    q.get("variant", "connected")))
+            if parsed.path == "/api/layout-rc":
+                return self.reply(200, layout_rc_data(q["process"], q["run"]))
             if parsed.path == "/api/drc":
                 return self.reply(200, drc_data(q["process"], q["run"],
                                                 q.get("variant", "connected")))

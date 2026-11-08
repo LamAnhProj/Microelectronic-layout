@@ -62,6 +62,17 @@ a Mac-local adapted trace deck under `runs/dashboard/traces/` when it displays
 a waveform. These trace replays are exploratory views of the pinned evidence;
 the full pipeline runner remains the validated measurement source.
 
+In **Layout**, select a run with R-C extraction to see the colored resistor
+links over its GDS. Use **Net** to isolate IN, OUT, VDD or VSS; toggle resistor
+links or capacitor anchors, then click an element in its list or on the canvas
+to highlight its two Magic node coordinates and extracted value. The table
+computes DC effective resistance from each external port to the MOS terminals
+through the branching resistor network. The positions come from the run's
+hashed `inverter.res.ext` node annotations, aligned with the hashed
+`layout.tcl` port boxes and checked against the GDS bounds. Magic does not
+identify an exact routed path or conductor layer for each resistor; straight
+links in the overlay are electrical connections between node anchors.
+
 ## DRC errors in the GUI
 
 In **DRC / LVS**, choose a layout variant in the **DRC marker browser**. The

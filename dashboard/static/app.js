@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-const state = {overview:null,process:'sky130',run:null,report:null,view:'overview',waveKind:'schematic',waveSignals:new Set(['in','out']),wave:null,layout:null,layers:new Set(),doc:null,experiment:null,plot:null,layoutZoom:1,layoutPan:[0,0],drag:null,drc:null,drcLayout:null,drcFocus:null,lvs:null,pex:null,schematic:null,editorExperiment:null,checkpoints:[]};
+const state = {overview:null,process:'sky130',run:null,report:null,view:'overview',waveKind:'schematic',waveSignals:new Set(['in','out']),wave:null,layout:null,rcLayout:null,rcSelection:null,rcShowR:true,rcShowC:false,rcNet:'all',layers:new Set(),doc:null,experiment:null,plot:null,layoutZoom:1,layoutPan:[0,0],drag:null,drc:null,drcLayout:null,drcFocus:null,lvs:null,pex:null,schematic:null,editorExperiment:null,checkpoints:[]};
 
 async function api(path, options={}, retried=false) {
   const response = await fetch(path, options);
@@ -22,7 +22,7 @@ function drcValue(){const c=state.report?.checks||{};return state.process==='sky
 function magicValue(){const c=state.report?.checks||{};return state.process==='sky130'?c.magic_full_drc_errors:c.magic_connected_drc_errors;}
 function lvsValue(){const c=state.report?.checks||{};return state.process==='sky130'?c.lvs:c.connected_lvs;}
 function selectRun(){const options=state.overview.runs[state.process]||[];const select=$('run-select');clear(select);for(const item of options){const opt=add(select,'option',`${item.status.toUpperCase()} · ${item.id.slice(0,8)}`);opt.value=item.id;}const chosen=options.find(item=>item.status==='passed')||options[0];state.run=chosen?.id||null;select.value=state.run||'';}
-async function loadRun(){if(!state.run){state.report=null;notice('No validation runs found for this process.',true);return;}if($('checkpoint-dialog').open)$('checkpoint-dialog').close();state.report=await api(query('/api/run',{process:state.process,run:state.run}));state.wave=null;state.layout=null;state.drc=null;state.drcLayout=null;state.lvs=null;state.pex=null;state.schematic=null;state.editorExperiment=null;state.layers.clear();const rcx=!!state.report.checks?.rc_network;for(const el of document.querySelectorAll('[data-wave="rcx"],#testbench-select option[value="rcx"],#pex-kind option[value="rcx"]'))el.disabled=!rcx;if(!rcx&&state.waveKind==='rcx')state.waveKind='postlayout';if(!rcx&&$('pex-kind').value==='rcx')$('pex-kind').value='postlayout';for(const el of document.querySelectorAll('[data-wave]'))el.classList.toggle('selected',el.dataset.wave===state.waveKind);renderOverview();renderSchematic();renderVerification();configureEvidenceSelectors();if(state.view==='waveforms')await loadWave();if(state.view==='layout')await loadLayout();if(state.view==='verification')await loadEvidence();if(state.view==='pex')await loadPex();if(state.view==='schematic')await loadSchematic();}
+async function loadRun(){if(!state.run){state.report=null;notice('No validation runs found for this process.',true);return;}if($('checkpoint-dialog').open)$('checkpoint-dialog').close();state.report=await api(query('/api/run',{process:state.process,run:state.run}));state.wave=null;state.layout=null;state.rcLayout=null;state.rcSelection=null;state.drc=null;state.drcLayout=null;state.lvs=null;state.pex=null;state.schematic=null;state.editorExperiment=null;state.layers.clear();const rcx=!!state.report.checks?.rc_network;for(const el of document.querySelectorAll('[data-wave="rcx"],#testbench-select option[value="rcx"],#pex-kind option[value="rcx"]'))el.disabled=!rcx;if(!rcx&&state.waveKind==='rcx')state.waveKind='postlayout';if(!rcx&&$('pex-kind').value==='rcx')$('pex-kind').value='postlayout';for(const el of document.querySelectorAll('[data-wave]'))el.classList.toggle('selected',el.dataset.wave===state.waveKind);renderOverview();renderSchematic();renderVerification();configureEvidenceSelectors();if(state.view==='waveforms')await loadWave();if(state.view==='layout')await loadLayout();if(state.view==='verification')await loadEvidence();if(state.view==='pex')await loadPex();if(state.view==='schematic')await loadSchematic();}
 function checkpointRow(parent,item){const button=add(parent,'button',undefined,'pipeline-item pipeline-action');button.type='button';button.dataset.checkpoint=item.id;button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-label',`Inspect ${item.title} checkpoint`);add(button,'strong',item.title);const right=add(button,'span',undefined,'pipeline-right');add(right,'span',item.status,item.cls);add(right,'span','›','pipeline-chevron');}
 function checkpointData(){
   const report=state.report,c=report.checks||{},sch=metric(c,'schematic')||{},post=metric(c,'postlayout')||{},rc=metric(c,'rcx')||{},evidence=report.evidence_sha256||{};
@@ -129,9 +129,96 @@ function plotHover(event){
   if(p.signals.has('out'))lines.push(`OUT  ${row[2].toFixed(3)} V`);
   tip.textContent=lines.join('\n');tip.style.left=`${Math.min(px+14,rect.width-130)}px`;tip.style.top=`${Math.max(12,event.clientY-rect.top-72)}px`;tip.hidden=false;
 }
-async function loadLayout(){if(!state.report)return;const data=await api(query('/api/layout',{process:state.process,run:state.run}));state.layout=data;state.layers=new Set(data.layers.map(layer=>layer.key));state.layoutZoom=1;state.layoutPan=[0,0];$('layout-count').textContent=`${data.shape_count.toLocaleString()} polygons · ${data.layers.length} layers`;const list=$('layer-list');clear(list);for(const layer of data.layers){const label=add(list,'label',undefined,'layer-row');const input=add(label,'input');input.type='checkbox';input.checked=true;input.dataset.layer=layer.key;const swatch=add(label,'span',undefined,'layer-color');swatch.style.background=layer.color;add(label,'span',layer.name);add(label,'span',layer.count,'count');input.addEventListener('change',()=>{input.checked?state.layers.add(layer.key):state.layers.delete(layer.key);drawLayout();});}requestAnimationFrame(drawLayout);}
+async function loadLayout(){
+  if(!state.report)return;
+  const process=state.process,run=state.run,fields={process,run};
+  const [data,rc]=await Promise.all([
+    api(query('/api/layout',fields)),
+    state.report.checks?.rc_network?api(query('/api/layout-rc',fields)).catch(err=>{notice(`R-C overlay unavailable: ${err.message}`,true);return null;}):Promise.resolve(null)
+  ]);
+  if(process!==state.process||run!==state.run)return;
+  state.layout=data;state.rcLayout=rc;state.rcSelection=null;state.layers=new Set(data.layers.map(layer=>layer.key));state.layoutZoom=1;state.layoutPan=[0,0];
+  $('rc-canvas-detail').hidden=true;
+  $('layout-count').textContent=`${data.shape_count.toLocaleString()} polygons · ${data.layers.length} layers${rc?` · ${rc.segments.length} R · ${rc.capacitors.length} C`:''}`;
+  const list=$('layer-list');clear(list);
+  for(const layer of data.layers){const label=add(list,'label',undefined,'layer-row');const input=add(label,'input');input.type='checkbox';input.checked=true;input.dataset.layer=layer.key;const swatch=add(label,'span',undefined,'layer-color');swatch.style.background=layer.color;add(label,'span',layer.name);add(label,'span',layer.count,'count');input.addEventListener('change',()=>{input.checked?state.layers.add(layer.key):state.layers.delete(layer.key);drawLayout();});}
+  renderRcPanel();requestAnimationFrame(drawLayout);
+}
 function layoutTransform(w,h,bbox){const [x0,y0,x1,y1]=bbox,scale=Math.min((w-80)/(x1-x0),(h-80)/(y1-y0))*state.layoutZoom,cx=(x0+x1)/2,cy=(y0+y1)/2;return {x:v=>w/2+(v-cx)*scale+state.layoutPan[0],y:v=>h/2-(v-cy)*scale+state.layoutPan[1],inverseX:px=>(px-w/2-state.layoutPan[0])/scale+cx,inverseY:py=>-(py-h/2-state.layoutPan[1])/scale+cy};}
-function drawLayout(){const data=state.layout;if(!data||state.view!=='layout')return;const canvas=$('layout-canvas'),{ctx,w,h}=canvasSetup(canvas),tr=layoutTransform(w,h,data.bbox);ctx.fillStyle='#081b26';ctx.fillRect(0,0,w,h);ctx.strokeStyle='#173340';ctx.lineWidth=1;for(let x=0;x<w;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}for(let y=0;y<h;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}for(const layer of data.layers){if(!state.layers.has(layer.key))continue;ctx.fillStyle=layer.color+'99';ctx.strokeStyle=layer.color;ctx.lineWidth=1;for(const poly of layer.polygons){ctx.beginPath();for(const [i,ring] of [poly.hull,...poly.holes].entries()){for(let j=0;j<ring.length;j++){const [x,y]=ring[j];if(j===0)ctx.moveTo(tr.x(x),tr.y(y));else ctx.lineTo(tr.x(x),tr.y(y));}ctx.closePath();}ctx.fill('evenodd');ctx.stroke();}}canvas._layoutTransform=tr;}
+const rcColors={IN:'#5ad9e9',OUT:'#f6b76a',VDD:'#d4a6ff',VSS:'#98e4a7'};
+function drawRcLink(ctx,tr,item,color,width,dashed=false){
+  const [ax,ay]=item.a_xy,[bx,by]=item.b_xy,x1=tr.x(ax),y1=tr.y(ay),x2=tr.x(bx),y2=tr.y(by);
+  ctx.save();ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=width;ctx.setLineDash(dashed?[5,4]:[]);
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);
+  for(const [x,y] of [[x1,y1],[x2,y2]]){ctx.beginPath();ctx.arc(x,y,width>3?4.5:2.5,0,Math.PI*2);ctx.fill();}
+  ctx.restore();
+}
+function drawLayout(){
+  const data=state.layout;if(!data||state.view!=='layout')return;
+  const canvas=$('layout-canvas'),{ctx,w,h}=canvasSetup(canvas),tr=layoutTransform(w,h,data.bbox);
+  ctx.fillStyle='#081b26';ctx.fillRect(0,0,w,h);ctx.strokeStyle='#173340';ctx.lineWidth=1;
+  for(let x=0;x<w;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
+  for(let y=0;y<h;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  for(const layer of data.layers){if(!state.layers.has(layer.key))continue;ctx.fillStyle=layer.color+'99';ctx.strokeStyle=layer.color;ctx.lineWidth=1;for(const poly of layer.polygons){ctx.beginPath();for(const ring of [poly.hull,...poly.holes]){for(let j=0;j<ring.length;j++){const [x,y]=ring[j];if(j===0)ctx.moveTo(tr.x(x),tr.y(y));else ctx.lineTo(tr.x(x),tr.y(y));}ctx.closePath();}ctx.fill('evenodd');ctx.stroke();}}
+  const rc=state.rcLayout;
+  if(rc){
+    if(state.rcShowR)for(const item of rc.segments){if(state.rcNet!=='all'&&item.net!==state.rcNet)continue;drawRcLink(ctx,tr,item,rcColors[item.net]+'b5',2.2,true);}
+    if(state.rcShowC)for(const item of rc.capacitors){if(state.rcNet!=='all'&&item.net_a!==state.rcNet&&item.net_b!==state.rcNet)continue;drawRcLink(ctx,tr,item,'#ffe29d88',1.3,true);}
+    if(state.rcSelection){const collection=state.rcSelection.kind==='R'?rc.segments:rc.capacitors;const item=collection.find(row=>row.id===state.rcSelection.id);if(item)drawRcLink(ctx,tr,item,'#ffffff',5);}
+  }
+  canvas._layoutTransform=tr;
+}
+function renderRcPanel(){
+  const rc=state.rcLayout;$('rc-show-resistors').disabled=!rc;$('rc-show-capacitors').disabled=!rc;$('rc-net-filter').disabled=!rc;
+  $('rc-layout-count').textContent=rc?`${rc.segments.length} resistors · ${rc.capacitors.length} capacitors · ${rc.total_ff.toFixed(3)} fF`:'No R-C network in this run';
+  $('rc-layout-note').textContent=rc?rc.geometry_note:'Select a recent validated R-C run to inspect its extracted network on this GDS.';
+  const summary=$('rc-net-summary');clear(summary);const terminals=$('rc-terminal-table');clear(terminals);
+  if(!rc){clear($('rc-resistor-list'));clear($('rc-capacitor-list'));$('rc-selected-detail').textContent='No R-C overlay for this run.';$('rc-canvas-detail').hidden=true;return;}
+  for(const net of rc.nets){const card=add(summary,'div',undefined,'rc-net-card');add(card,'strong',net.name,`rc-net-${net.name}`);add(card,'small',`${net.resistors} segments · largest ${net.largest_ohm.toFixed(2)} Ω`);}
+  for(const item of rc.terminals){const card=add(terminals,'div',undefined,'rc-terminal');add(card,'strong',`${item.device} ${item.terminal}`);add(card,'span',`${item.net} → ${item.node}`);add(card,'span',`${item.effective_ohm.toFixed(3)} Ω`);}
+  renderRcLists();
+}
+function renderRcLists(){
+  const rc=state.rcLayout;if(!rc)return;
+  for(const [kind,id,items] of [['R','rc-resistor-list',rc.segments],['C','rc-capacitor-list',rc.capacitors]]){
+    const list=$(id);clear(list);
+    const visible=items.filter(item=>state.rcNet==='all'||(kind==='R'?item.net===state.rcNet:item.net_a===state.rcNet||item.net_b===state.rcNet));
+    if(!visible.length)add(list,'div','No elements for this net.','empty-state');
+    for(const item of visible){const button=add(list,'button',undefined,'rc-element');button.type='button';button.dataset.rcKind=kind;button.dataset.rcId=item.id;add(button,'span',`${item.id} ${item.a} → ${item.b}`);add(button,'span',kind==='R'?`${item.ohm.toFixed(3)} Ω`:`${item.ff.toFixed(5)} fF`);button.classList.toggle('selected',state.rcSelection?.kind===kind&&state.rcSelection?.id===item.id);button.addEventListener('click',()=>selectRcElement(kind,item.id));}
+  }
+}
+function selectRcElement(kind,id){
+  const rc=state.rcLayout;if(!rc)return;
+  const item=(kind==='R'?rc.segments:rc.capacitors).find(row=>row.id===id);if(!item)return;
+  state.rcSelection={kind,id};if(kind==='R'){state.rcShowR=true;$('rc-show-resistors').checked=true;}else{state.rcShowC=true;$('rc-show-capacitors').checked=true;}
+  $('rc-selected-detail').textContent=`${id}: ${item.a} (${item.a_xy.map(v=>v.toFixed(3)).join(', ')} µm) → ${item.b} (${item.b_xy.map(v=>v.toFixed(3)).join(', ')} µm) · ${kind==='R'?`${item.ohm.toFixed(4)} Ω`:`${item.ff.toFixed(5)} fF`}. Anchors mark extracted nodes; the straight line is not the routed path.`;
+  $('rc-canvas-detail').textContent=`${id} · ${item.a} → ${item.b} · ${kind==='R'?`${item.ohm.toFixed(3)} Ω`:`${item.ff.toFixed(5)} fF`} · node link, not routed path`;$('rc-canvas-detail').hidden=false;
+  for(const button of document.querySelectorAll('.rc-element'))button.classList.toggle('selected',button.dataset.rcKind===kind&&button.dataset.rcId===id);
+  drawLayout();$('layout-canvas').scrollIntoView({behavior:'smooth',block:'center'});
+}
+function attachRcEvents(){
+  $('rc-show-resistors').addEventListener('change',event=>{state.rcShowR=event.target.checked;if(!state.rcShowR&&state.rcSelection?.kind==='R'){state.rcSelection=null;$('rc-canvas-detail').hidden=true;}drawLayout();});
+  $('rc-show-capacitors').addEventListener('change',event=>{state.rcShowC=event.target.checked;if(!state.rcShowC&&state.rcSelection?.kind==='C'){state.rcSelection=null;$('rc-canvas-detail').hidden=true;}drawLayout();});
+  $('rc-net-filter').addEventListener('change',event=>{state.rcNet=event.target.value;state.rcSelection=null;$('rc-canvas-detail').hidden=true;$('rc-selected-detail').textContent='Select a resistor or capacitor to highlight its anchors on the GDS.';renderRcLists();drawLayout();});
+  const canvas=$('layout-canvas');
+  canvas.addEventListener('pointerdown',event=>{canvas._rcStart=[event.clientX,event.clientY];canvas._rcDragged=false;});
+  canvas.addEventListener('pointermove',event=>{if(canvas._rcStart&&Math.hypot(event.clientX-canvas._rcStart[0],event.clientY-canvas._rcStart[1])>5)canvas._rcDragged=true;});
+  canvas.addEventListener('click',event=>{
+    if(canvas._rcDragged||!state.rcLayout||!canvas._layoutTransform)return;
+    const rect=canvas.getBoundingClientRect(),px=event.clientX-rect.left,py=event.clientY-rect.top,tr=canvas._layoutTransform;
+    let nearest=null,best=12;
+    for(const [kind,items,enabled] of [['R',state.rcLayout.segments,state.rcShowR],['C',state.rcLayout.capacitors,state.rcShowC]]){
+      if(!enabled)continue;
+      for(const item of items){if(state.rcNet!=='all'&&(kind==='R'?item.net!==state.rcNet:item.net_a!==state.rcNet&&item.net_b!==state.rcNet))continue;
+        const [ax,ay]=item.a_xy,[bx,by]=item.b_xy,x1=tr.x(ax),y1=tr.y(ay),x2=tr.x(bx),y2=tr.y(by),dx=x2-x1,dy=y2-y1;
+        const t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/(dx*dx+dy*dy||1)));
+        const distance=Math.hypot(px-x1-t*dx,py-y1-t*dy);
+        if(distance<best){best=distance;nearest={kind,id:item.id};}
+      }
+    }
+    if(nearest)selectRcElement(nearest.kind,nearest.id);
+  });
+}
 function renderDocList(){const list=$('doc-list');clear(list);for(const name of state.overview.documents){const button=add(list,'button',name,'doc-item');button.type='button';button.dataset.doc=name;button.addEventListener('click',()=>loadDoc(name).catch(err=>notice(err.message,true)));}}
 async function loadDoc(name){const data=await api(query('/api/document',{name}));state.doc=name;for(const el of document.querySelectorAll('.doc-item'))el.classList.toggle('active',el.dataset.doc===name);renderMarkdown(data.text,$('doc-body'));}
 function inlineMarkdown(parent,text){
@@ -338,5 +425,5 @@ function attachWorkbenchEvents(){
 async function simulate(event){event.preventDefault();const button=event.currentTarget.querySelector('button[type=submit]');button.disabled=true;$('experiment-status').textContent='Running local ngspice…';try{const body={process:state.process,voltage:Number($('exp-voltage').value),load_ff:Number($('exp-load').value),temp_c:Number($('exp-temp').value)};const data=await api('/api/simulate',{method:'POST',headers:{'Content-Type':'application/json','X-Lab-Token':state.overview.token},body:JSON.stringify(body)});state.experiment=data;const m=data.manifest;$('experiment-status').textContent='Exploratory run saved';$('experiment-id').textContent=`Experiment ${m.id}`;const box=$('experiment-result');clear(box);for(const [label,value] of [['Process',state.overview.processes[m.process].title],['Supply',`${m.voltage} V`],['Load',`${m.load_ff} fF`],['Temperature',`${m.temp_c} °C`],['VOUT at 0.5 ns',`${m.high_v.toFixed(4)} V`],['VOUT at 2.0 ns',`${m.low_v.toFixed(4)} V`]]){const row=add(box,'div',undefined,'result-line');add(row,'span',label);add(row,'strong',value);}requestAnimationFrame(()=>drawPlot($('experiment-canvas'),data.samples));notice(`Exploratory run ${m.id.slice(0,8)} saved locally.`);}catch(err){$('experiment-status').textContent='Simulation failed';notice(err.message,true);}finally{button.disabled=false;}}
 async function rerun(){const button=$('rerun-button');button.disabled=true;try{const data=await api('/api/validate',{method:'POST',headers:{'Content-Type':'application/json','X-Lab-Token':state.overview.token},body:JSON.stringify({process:state.process})});notice('Full validation pipeline started. Checking the new report…');while(true){await new Promise(resolve=>setTimeout(resolve,2000));const job=await api(query('/api/job',{id:data.job_id}));if(job.state==='running')continue;if(job.state==='complete'){state.overview=await api('/api/overview');selectRun();await loadRun();notice(`Mac validation finished: ${job.report_status||'inspect report'} · ${job.run_id?.slice(0,8)||'no report'}`);}else notice(`Validation failed: ${job.output||'inspect worker logs'}`,true);break;}}catch(err){notice(err.message,true);}finally{button.disabled=false;}}
 function attachEvents(){$('process-select').addEventListener('change',async event=>{state.process=event.target.value;state.experiment=null;$('experiment-result').innerHTML='<div class="empty-state">Adjust a parameter and simulate to see a new trace.</div>';$('experiment-status').textContent='Ready to simulate';$('exp-voltage').value=state.overview.processes[state.process].voltage;selectRun();await loadRun();});$('run-select').addEventListener('change',async event=>{state.run=event.target.value;await loadRun();});for(const button of document.querySelectorAll('[data-view]'))button.addEventListener('click',()=>setView(button.dataset.view));for(const button of document.querySelectorAll('[data-goto]'))button.addEventListener('click',()=>setView(button.dataset.goto));for(const button of document.querySelectorAll('[data-wave]'))button.addEventListener('click',()=>{state.waveKind=button.dataset.wave;for(const el of document.querySelectorAll('[data-wave]'))el.classList.toggle('selected',el===button);loadWave().catch(err=>notice(err.message,true));});$('copy-netlist').addEventListener('click',()=>navigator.clipboard.writeText($('schematic-code').textContent).then(()=>notice('Netlist copied.')).catch(err=>notice(err.message,true)));$('open-artifact').addEventListener('click',async()=>{try{const data=await api(query('/api/artifact',{process:state.process,run:state.run,name:$('artifact-select').value}));$('artifact-content').textContent=data.text;}catch(err){notice(err.message,true);}});$('experiment-form').addEventListener('submit',simulate);$('rerun-button').addEventListener('click',rerun);$('fit-layout').addEventListener('click',()=>{state.layoutZoom=1;state.layoutPan=[0,0];drawLayout();});$('toggle-layers').addEventListener('click',()=>{const all=state.layers.size!==state.layout.layers.length;state.layers=new Set(all?state.layout.layers.map(layer=>layer.key):[]);for(const input of document.querySelectorAll('[data-layer]'))input.checked=all;drawLayout();});const canvas=$('layout-canvas');canvas.addEventListener('wheel',event=>{event.preventDefault();state.layoutZoom=Math.max(.35,Math.min(12,state.layoutZoom*(event.deltaY<0?1.17:.85)));drawLayout();},{passive:false});canvas.addEventListener('pointerdown',event=>{state.drag=[event.clientX,event.clientY,...state.layoutPan];canvas.setPointerCapture(event.pointerId);});canvas.addEventListener('pointermove',event=>{const rect=canvas.getBoundingClientRect(),tr=canvas._layoutTransform;if(tr)$('layout-coordinates').textContent=`x ${tr.inverseX(event.clientX-rect.left).toFixed(3)} µm · y ${tr.inverseY(event.clientY-rect.top).toFixed(3)} µm`;if(state.drag){state.layoutPan=[state.drag[2]+event.clientX-state.drag[0],state.drag[3]+event.clientY-state.drag[1]];drawLayout();}});canvas.addEventListener('pointerup',()=>state.drag=null);$('wave-canvas').addEventListener('mousemove',plotHover);$('wave-canvas').addEventListener('mouseleave',()=>$('wave-tooltip').hidden=true);window.addEventListener('resize',()=>{if(state.view==='layout')drawLayout();if(state.view==='waveforms'&&state.wave)drawPlot($('wave-canvas'),state.wave.samples,state.waveSignals);if(state.view==='experiments'&&state.experiment)drawPlot($('experiment-canvas'),state.experiment.samples);});}
-async function init(){try{state.overview=await api('/api/overview');const select=$('process-select');for(const [id,spec] of Object.entries(state.overview.processes)){const opt=add(select,'option',spec.title);opt.value=id;}select.value=state.process;$('exp-voltage').value=state.overview.processes[state.process].voltage;selectRun();renderDocList();attachEvents();attachEvidenceEvents();attachWorkbenchEvents();attachSchematicEvents();await loadRun();}catch(err){notice(`Dashboard failed to load: ${err.message}`,true);}}
+async function init(){try{state.overview=await api('/api/overview');const select=$('process-select');for(const [id,spec] of Object.entries(state.overview.processes)){const opt=add(select,'option',spec.title);opt.value=id;}select.value=state.process;$('exp-voltage').value=state.overview.processes[state.process].voltage;selectRun();renderDocList();attachEvents();attachEvidenceEvents();attachWorkbenchEvents();attachSchematicEvents();attachRcEvents();await loadRun();}catch(err){notice(`Dashboard failed to load: ${err.message}`,true);}}
 init();

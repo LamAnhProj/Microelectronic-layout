@@ -30,8 +30,13 @@ It reruns ngspice from the selected run's schematic, capacitance-only, or
 distributed wire R-C netlist and saves traces under `runs/dashboard/traces/`.
 The testbench panel shows the selected UUID's exact SPICE deck for each mode.
 Crossing delays are read from the validated report, rather than estimated from
-the displayed sampled curve. The GDS view is a read-only polygon viewer. For
-mask-level editing and signoff review, open the GDS in native KLayout.
+the displayed sampled curve. The **Layout** view overlays Magic's R-C node
+anchors and resistor/capacitor connections on the selected run's actual GDS.
+Filter by net and select an element to highlight its endpoints. Its table
+solves the branching resistor network for DC effective resistance from each
+port to its MOS terminals. Straight links join electrical node anchors; they
+are not reconstructed wire paths or layer assignments. For mask-level editing
+and signoff review, open the GDS in native KLayout.
 
 The **DRC / LVS** view now parses KLayout marker coordinates and Netgen
 comparisons, including GF180's deliberate failing controls. **PEX** displays
