@@ -2,10 +2,12 @@
 load rco_passive_probe
 box values 0um 0um 0um 0um
 magic::gencell gf180mcu::cap_mim_2p0fF CUNIT w 5 l 5
+box values 80um 0um 80um 0um
+magic::gencell gf180mcu::cap_mim_2p0fF CBALANCED w 7 l 7
 box values 40um 0um 40um 0um
 magic::gencell gf180mcu::ppolyf_u_1k RDELAY w 1 l 440
 select top cell
-box values -20um -20um 70um 470um
+box values -20um -20um 110um 470um
 drc style drc(full)
 drc check
 drc catchup

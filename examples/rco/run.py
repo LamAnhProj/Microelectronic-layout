@@ -45,6 +45,8 @@ CONFIG = {
         "wbuf2n": "8u", "wbuf2p": "16u",
     },
 }
+GF_BALANCED_MIM_WIDTH_UM = (5.0, 5.0, 6.0, 6.5, 6.7, 6.8, 6.9, 7.0, 7.0)
+BANK_STYLES = ("binary", "guarded", "balanced")
 
 
 def sha256(path: Path) -> str:
@@ -75,7 +77,9 @@ def passive_lines(process: str, stage: int, bit: int, node: str,
         unit = "sky130_fd_pr__cap_mim_m3_2 w=4.5 l=4.5"
     else:
         width = (f"{5 * math.sqrt(1.10 ** bit):.4f}u"
-                 if bank_style == "guarded" else "5u")
+                 if bank_style == "guarded" else
+                 f"{GF_BALANCED_MIM_WIDTH_UM[bit]:.1f}u"
+                 if bank_style == "balanced" else "5u")
         unit = ("cap_mim_2f0_m4m5_noshield "
                 f"c_width={width} c_length={width}")
     anchor = 3 if process == "sky130" else 4
@@ -99,8 +103,8 @@ def build_netlist(process: str, code: int, main: bool = True,
         raise ValueError("Choose sky130 or gf180 and a nine-bit code from 0 to 511")
     if passives not in ("ideal", "pdk"):
         raise ValueError("Choose ideal or pdk passives")
-    if bank_style not in ("binary", "guarded"):
-        raise ValueError("Choose binary or guarded bank")
+    if bank_style not in BANK_STYLES:
+        raise ValueError("Choose binary, guarded, or balanced bank")
     c = CONFIG[process]
     pdk = PDK_ROOT / c["pdk"]
     stop_us = simulation_stop_us(code, main, passives)
@@ -187,17 +191,19 @@ def build_netlist(process: str, code: int, main: bool = True,
     return "\n".join(lines) + "\n"
 
 
-def xschem_testbench(process: str, code: int, main: bool) -> tuple[str, Path, Path]:
+def xschem_testbench(process: str, code: int, main: bool,
+                     bank_style: str) -> tuple[str, Path, Path]:
     """Use the current editable source for devices and the generated stimulus."""
     import sys
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
     from examples.rco.generate_xschem import verify_export
 
-    source = ROOT / "examples" / "rco" / process / "rco.sch"
+    source_name = "rco_balanced.sch" if bank_style == "balanced" else "rco.sch"
+    source = ROOT / "examples" / "rco" / process / source_name
     if not source.is_file():
         raise ValueError("Editable RCO schematic is missing")
-    exported = verify_export(process, source)
+    exported = verify_export(process, source, bank_style)
     instances = []
     for line in exported.read_text().splitlines():
         if line.startswith("X"):
@@ -206,7 +212,7 @@ def xschem_testbench(process: str, code: int, main: bool) -> tuple[str, Path, Pa
             instances[-1] += " " + line[1:].strip()
     if len(instances) != (367 if process == "sky130" else 319):
         raise ValueError("Xschem export has an unexpected device count")
-    generated = build_netlist(process, code, main, "pdk", "binary").splitlines()
+    generated = build_netlist(process, code, main, "pdk", bank_style).splitlines()
     bench = []
     in_subckt = False
     for line in generated:
@@ -289,14 +295,15 @@ def run(process: str, code: int, main: bool = True,
     if PIN not in str(pdk.resolve()) or not pdk.is_dir():
         raise RuntimeError(f"Pinned {c['pdk']} PDK is unavailable")
     if (schematic not in ("generated", "xschem") or
-            (schematic == "xschem" and (passives != "pdk" or bank_style != "binary"))):
-        raise ValueError("Editable Xschem runs require binary PDK passives")
+            (schematic == "xschem" and (passives != "pdk" or bank_style not in ("binary", "balanced") or
+                                         (bank_style == "balanced" and process != "gf180")))):
+        raise ValueError("Editable Xschem runs require binary PDK passives, or balanced GF")
     folder = ROOT / "runs" / "rco" / str(uuid.uuid4())
     folder.mkdir(parents=True, mode=0o700)
     os.chmod(folder, 0o700)
     deck = folder / "rco.spice"
     if schematic == "xschem":
-        netlist_text, schematic_source, schematic_export = xschem_testbench(process, code, main)
+        netlist_text, schematic_source, schematic_export = xschem_testbench(process, code, main, bank_style)
     else:
         netlist_text, schematic_source, schematic_export = (
             build_netlist(process, code, main, passives, bank_style), None, None)
@@ -358,7 +365,7 @@ if __name__ == "__main__":
     parser.add_argument("code", type=int, help="nine-bit code, 0 to 511")
     parser.add_argument("--main-off", action="store_true")
     parser.add_argument("--passives", choices=("ideal", "pdk"), default="ideal")
-    parser.add_argument("--bank-style", choices=("binary", "guarded"), default="binary")
+    parser.add_argument("--bank-style", choices=BANK_STYLES, default="binary")
     parser.add_argument("--xschem", action="store_true", help="simulate current editable Xschem circuit")
     args = parser.parse_args()
     if not 0 <= args.code <= 511:

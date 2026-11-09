@@ -3,7 +3,7 @@
 import re
 import unittest
 
-from examples.rco.run import build_netlist, simulation_stop_us
+from examples.rco.run import GF_BALANCED_MIM_WIDTH_UM, build_netlist, simulation_stop_us
 
 
 class RcoNetlistTests(unittest.TestCase):
@@ -51,6 +51,15 @@ class RcoNetlistTests(unittest.TestCase):
         self.assertEqual(len(widths), 9)
         self.assertEqual(widths[0], 5.0)
         self.assertTrue(all(b > a for a, b in zip(widths, widths[1:])))
+
+    def test_balanced_gf_bank_applies_each_measured_width_to_all_stages(self):
+        deck = build_netlist("gf180", 117, passives="pdk", bank_style="balanced")
+        for stage in range(3):
+            for bit, width in enumerate(GF_BALANCED_MIM_WIDTH_UM):
+                name = rf"^XC{stage}_{bit}_0_0 \S+ \S+ cap_mim_2f0_m4m5_noshield c_width=([\d.]+)u"
+                match = re.search(name, deck, re.M)
+                self.assertIsNotNone(match)
+                self.assertEqual(float(match.group(1)), width)
 
 
 if __name__ == "__main__":

@@ -18,10 +18,10 @@ from examples.rco.run import CONFIG, PDK_ROOT, build_netlist
 HERE = Path(__file__).resolve().parent
 
 
-def devices(process: str) -> list[tuple[str, str, list[str], dict[str, str]]]:
+def devices(process: str, bank_style: str = "binary") -> list[tuple[str, str, list[str], dict[str, str]]]:
     """Expand each INV, TG, and LS into physical PDK symbol instances."""
     result = []
-    for raw in build_netlist(process, 0, passives="pdk", bank_style="binary").splitlines():
+    for raw in build_netlist(process, 0, passives="pdk", bank_style=bank_style).splitlines():
         if not raw.startswith("X"):
             continue
         words = raw.split()
@@ -78,16 +78,16 @@ def symbol(process: str, kind: str) -> tuple[str, str]:
     return prefix + "cap_mim_analog.sym", "model=cap_mim_2f0_m4m5_noshield m=1"
 
 
-def generate(process: str) -> Path:
-    if process not in CONFIG:
-        raise ValueError(process)
+def generate(process: str, bank_style: str = "binary") -> Path:
+    if process not in CONFIG or (bank_style == "balanced" and process != "gf180") or bank_style not in ("binary", "balanced"):
+        raise ValueError("Editable RCO source requires binary, or balanced GF")
     lines = ["v {xschem version=3.4.4 file_version=1.2}", "G {}", "K {}",
              "V {}", "S {}", "E {}"]
     pins = 0
     current_group = ""
     row = 0
     slot = 0
-    for name, kind, nets, params in devices(process):
+    for name, kind, nets, params in devices(process, bank_style):
         # Separate the control, ring, switch, and passive rows for inspection.
         group = ("CONTROL" if name.startswith(("LB", "LS", "LMAIN")) else
                  "RING" if name.startswith("INV") else
@@ -128,14 +128,14 @@ def generate(process: str) -> Path:
             pins += 1
             lines.append(f"C {{devices/lab_pin.sym}} {x + dx} {y + dy} 0 0 "
                          f"{{name=p{pins} lab={net}}}")
-    path = HERE / process / "rco.sch"
+    path = HERE / process / ("rco_balanced.sch" if bank_style == "balanced" else "rco.sch")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
     return path
 
 
-def verify_export(process: str, path: Path) -> Path:
-    output = HERE / process / "xschem_export"
+def verify_export(process: str, path: Path, bank_style: str = "binary") -> Path:
+    output = HERE / process / ("xschem_export_balanced" if bank_style == "balanced" else "xschem_export")
     output.mkdir(exist_ok=True)
     pdk = PDK_ROOT / CONFIG[process]["pdk"] / "libs.tech" / "xschem"
     command = ["xschem", "-n", "-x", "-q", "-s", "--rcfile", str(pdk / "xschemrc"),
@@ -144,7 +144,7 @@ def verify_export(process: str, path: Path) -> Path:
                             capture_output=True, text=True, timeout=90)
     if result.returncode:
         raise RuntimeError(result.stdout + result.stderr)
-    netlist = output / "rco.spice"
+    netlist = output / f"{path.stem}.spice"
     content = netlist.read_text()
     counts = Counter()
     observed = {}
@@ -164,7 +164,7 @@ def verify_export(process: str, path: Path) -> Path:
     if counts != {"nmos": 65, "pmos": 65,
                   "cap": 234 if process == "sky130" else 186, "res": 3}:
         raise RuntimeError(f"Xschem export missing devices: {counts}")
-    for name, kind, nets, _ in devices(process):
+    for name, kind, nets, params in devices(process, bank_style):
         got = observed.get(name.upper())
         if got is None:
             raise RuntimeError(f"Xschem export missing {name}")
@@ -177,13 +177,20 @@ def verify_export(process: str, path: Path) -> Path:
             matches = actual == expected
         if not matches:
             raise RuntimeError(f"Xschem connectivity differs for {name}: {actual} != {expected}")
+        if kind == "cap":
+            width_key = "w" if process == "sky130" else "c_width"
+            expected_width = params[width_key]
+            export_key = "W" if process == "sky130" else width_key
+            if f"{export_key}={expected_width}" not in got:
+                raise RuntimeError(f"Xschem capacitor width differs for {name}")
     if re.search(r"IS MISSING|\?\?", content):
         raise RuntimeError("Xschem export has an unresolved symbol or net")
     return netlist
 
 
 if __name__ == "__main__":
-    for choice in CONFIG:
-        source = generate(choice)
-        exported = verify_export(choice, source)
-        print(f"{choice}: {source} -> {exported}")
+    for choice, style in (("sky130", "binary"), ("gf180", "binary"),
+                          ("gf180", "balanced")):
+        source = generate(choice, style)
+        exported = verify_export(choice, source, style)
+        print(f"{choice}/{style}: {source} -> {exported}")

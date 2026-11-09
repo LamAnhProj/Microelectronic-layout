@@ -89,6 +89,7 @@ def validate(process: str) -> dict:
     wanted = (["sky130_fd_pr__cap_mim_m3_2 l=4.5 w=4.5",
                "sky130_fd_pr__res_xhigh_po_1p41 l=330"] if process == "sky130" else
               ["cap_mim_2f0_m4m5_noshield c_width=5u c_length=5u",
+               "cap_mim_2f0_m4m5_noshield c_width=7u c_length=7u",
                "ppolyf_u_1k r_width=1u r_length=0.44m"])
     if not all(part in content for part in wanted):
         raise RuntimeError("Magic extracted unexpected passive model or geometry")

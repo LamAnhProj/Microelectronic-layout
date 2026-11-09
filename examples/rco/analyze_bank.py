@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import uuid
 
-from run import CONFIG, PIN, PDK_ROOT, ROOT, build_netlist, model_hash, sha256
+from run import BANK_STYLES, CONFIG, PIN, PDK_ROOT, ROOT, build_netlist, model_hash, sha256
 
 
 SOURCE = Path(__file__).resolve()
@@ -73,7 +73,7 @@ def one_code(process: str, code: int, bank_style: str, folder: Path,
 
 
 def analyze(process: str, bank_style: str, workers: int = 2) -> dict:
-    if process not in CONFIG or bank_style not in ("binary", "guarded"):
+    if process not in CONFIG or bank_style not in BANK_STYLES:
         raise ValueError("Choose a process and bank style")
     if (platform.system(), platform.machine()) != ("Darwin", "arm64"):
         raise RuntimeError("This check records native arm64 Mac execution only")
@@ -110,7 +110,7 @@ def analyze(process: str, bank_style: str, workers: int = 2) -> dict:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("process", choices=CONFIG)
-    parser.add_argument("--bank-style", choices=("binary", "guarded"), default="binary")
+    parser.add_argument("--bank-style", choices=BANK_STYLES, default="binary")
     parser.add_argument("--workers", type=int, choices=(1, 2, 3), default=2)
     args = parser.parse_args()
     result = analyze(args.process, args.bank_style, args.workers)

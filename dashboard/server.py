@@ -213,14 +213,16 @@ def rco_data(process: str, selected_run: str | None = None) -> dict:
         if selected is None:
             raise ValueError("RCO run not found for this process")
     else:
+        preferred_style = "balanced" if process == "gf180" else "binary"
         candidates = [item for item in runs if item["main"] and
-                      item["passives"] == "pdk" and item["bank_style"] == "binary"]
+                      item["passives"] == "pdk" and item["bank_style"] == preferred_style]
         if not candidates:
             candidates = [item for item in runs if item["main"] and item["passives"] == "pdk"]
         if not candidates:
             candidates = [item for item in runs if item["main"]]
         selected = min(candidates or runs,
-                       key=lambda item: round(abs(item["frequency_error_pct"]), 2))
+                       key=lambda item: (abs(item["frequency_error_pct"]),
+                                         item["schematic"] != "xschem"))
     path = folder / selected["id"]
     rows = []
     for line in (path / "waveform.dat").read_text().splitlines()[1:]:
@@ -242,7 +244,9 @@ def rco_data(process: str, selected_run: str | None = None) -> dict:
             "bank_ac": rco_bank_ac_data(process, selected["bank_style"]),
             "samples": samples, "netlist": (path / "rco.spice").read_text(),
             "run_path": str(path),
-            "schematic_source": str(ROOT / "examples" / "rco" / process / "rco.sch"),
+            "schematic_source": str(ROOT / "examples" / "rco" / process /
+                                    ("rco_balanced.sch" if selected["bank_style"] == "balanced" and process == "gf180"
+                                     else "rco.sch")),
             "scope": ("Native arm64 Mac ngspice schematic simulation with pinned PDK MOS "
                       "and " + ("PDK resistor/MIM capacitor" if selected["passives"] == "pdk"
                                 else "retired passive choice" if selected["passives"] == "pdk_legacy"
@@ -559,11 +563,15 @@ def schematic_data(process: str) -> dict:
             "scope": "Editable Xschem source; existing validation runs use their pinned SPICE input"}
 
 
-def open_xschem(process: str, circuit: str = "inverter") -> dict:
+def open_xschem(process: str, circuit: str = "inverter",
+                bank_style: str = "binary") -> dict:
     if circuit == "inverter":
         source = schematic_source(process)
     elif circuit == "rco" and process in PROCESSES:
-        source = ROOT / "examples" / "rco" / process / "rco.sch"
+        if bank_style not in ("binary", "balanced") or (bank_style == "balanced" and process != "gf180"):
+            raise ValueError("Editable RCO source requires binary, or balanced GF")
+        source = ROOT / "examples" / "rco" / process / (
+            "rco_balanced.sch" if bank_style == "balanced" else "rco.sch")
         if not source.is_file():
             raise ValueError("Editable RCO Xschem source is missing")
     else:
@@ -1120,8 +1128,9 @@ def start_rco(process: str, code: object, main: object, passives: object = "pdk"
     if (process not in PROCESSES or type(code) is not int or not 0 <= code <= 511 or
             type(main) is not bool or passives not in ("ideal", "pdk") or
             schematic not in ("generated", "xschem") or
-            bank_style not in ("binary", "guarded") or
-            (schematic == "xschem" and (passives != "pdk" or bank_style != "binary"))):
+            bank_style not in ("binary", "guarded", "balanced") or
+            (schematic == "xschem" and (passives != "pdk" or bank_style not in ("binary", "balanced") or
+                                        (bank_style == "balanced" and process != "gf180")))):
         raise ValueError("Choose a process, a nine-bit code (0–511), and a main-switch state")
     with JOB_LOCK:
         if any(job["state"] == "running" for job in JOBS.values()):
@@ -1284,7 +1293,8 @@ class Handler(BaseHTTPRequestHandler):
                                                     payload.get("variant", "connected")))
             if self.path == "/api/open-xschem":
                 return self.reply(200, open_xschem(payload.get("process"),
-                                                   payload.get("circuit", "inverter")))
+                                                   payload.get("circuit", "inverter"),
+                                                   payload.get("bank_style", "binary")))
             if self.path == "/api/open-rco-passive-probe":
                 return self.reply(200, open_rco_passive_probe(payload.get("process")))
             if self.path == "/api/simulate-schematic":

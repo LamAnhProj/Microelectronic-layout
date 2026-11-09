@@ -12,14 +12,14 @@ import json
 from pathlib import Path
 import uuid
 
-from run import CONFIG, ROOT, run, sha256
+from run import BANK_STYLES, CONFIG, ROOT, run, sha256
 
 
 def sweep(process: str, first: int, last: int, *, workers: int = 2,
           bank_style: str = "binary") -> dict:
     if process not in CONFIG or not (0 <= first <= last <= 511):
         raise ValueError("Choose a PDK and a bounded code interval within 0–511")
-    if bank_style not in ("binary", "guarded"):
+    if bank_style not in BANK_STYLES:
         raise ValueError("Unknown bank style")
     with ThreadPoolExecutor(max_workers=workers) as pool:
         reports = list(pool.map(lambda code: run(process, code, True, "pdk",
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument("first", type=int)
     parser.add_argument("last", type=int)
     parser.add_argument("--workers", type=int, choices=(1, 2, 3), default=2)
-    parser.add_argument("--bank-style", choices=("binary", "guarded"), default="binary")
+    parser.add_argument("--bank-style", choices=BANK_STYLES, default="binary")
     args = parser.parse_args()
     result = sweep(args.process, args.first, args.last, workers=args.workers,
                    bank_style=args.bank_style)

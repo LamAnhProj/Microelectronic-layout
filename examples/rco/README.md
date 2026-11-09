@@ -145,20 +145,22 @@ per-run source, model, netlist, log, and waveform hashes in ignored `runs/rco/`.
 ### Editable Xschem circuit and testbench
 
 `python3 -m examples.rco.generate_xschem` rebuilds the PDK-symbol sources at
-`sky130/rco.sch` and `gf180/rco.sch`. The generator checks the exported nets
-of 65 NMOS, 65 PMOS, three resistors, and 234 SKY or 186 GF MIM cells against
-the binary-bank circuit model. Native Xschem opens these named-net drawings
+`sky130/rco.sch`, `gf180/rco.sch`, and `gf180/rco_balanced.sch`. The generator
+checks exported nets and capacitor widths of 65 NMOS, 65 PMOS, three
+resistors, and 234 SKY or 186 GF MIM cells against the corresponding bank
+model. Native Xschem opens these named-net drawings
 through the dashboard. The **Simulate editable Xschem source** option exports
 the current `.sch`, inserts its device lines into the same stimulus and
 measurement bench, and records the schematic and export hashes. It measured
 512.863 kHz on SKY at code 146 and 512.310 kHz on GF at code 211, within
-2 Hz of the generated-netlist runs. This is a schematic translation check,
-not physical LVS.
+2 Hz of the generated-netlist runs. The balanced GF source measured
+511.490 kHz at code 117, within 1 Hz of its generated-netlist run. These
+are schematic translation checks, not physical LVS.
 
 ### Isolated physical passive audit
 
 `python3 examples/rco/validate_passives.py sky130` and the `gf180` form draw
-one MIM and one high resistance poly PCell, export GDS, extract SPICE, and run
+selected MIM and high resistance poly PCells, export GDS, extract SPICE, and run
 Magic plus native KLayout DRC. Both current test cells had **zero Magic DRC
 errors and zero KLayout DRC items**. Magic extracted the same passive names
 and dimensions listed above. Each run has a hashed report under ignored
@@ -196,6 +198,33 @@ history, and layout. The dashboard plots all 512 GF points and lets a click
 load a physical trim code. The native Mac reports and per-code decks are in
 ignored `runs/rco/bank_ac/gf180/<uuid>/`.
 
+### Balanced GF bank candidate
+
+The binary and guarded AC sweeps let us estimate each bit's fixed-bias
+contribution as `ΔCᵢ(w) ≈ pᵢ + aᵢ(w / 5 µm)²`. We chose the smallest
+0.1 µm width that put each bit about 3 fF above the sum of all lower
+bits. The GF unit-cell widths for bits 0–8 are **5.0, 5.0, 6.0, 6.5,
+6.7, 6.8, 6.9, 7.0, 7.0 µm**. This changes unit-cell area while keeping
+the series/parallel topology and 1.8 V control interface.
+
+The complete **512-code GF AC bank sweep had zero reversed capacitance
+steps** at 1.65 V DC bias and 512 kHz AC. Its smallest measured binary
+carry margin was 3.392 fF. A native transient sweep of codes **112–120**
+had zero frequency reversals in its eight adjacent pairs. Code **117
+measured 511.490 kHz (−0.100%)** at 25 °C with typical PDK models and
+about **504.45 µW** core-supply power. These are promising electrical
+checks, not proof of monotonic transient behavior across all 512 codes
+or across process, voltage, and temperature. The dashboard labels this
+candidate **Balanced GF experiment**, with a separate editable Xschem source.
+With `MAIN=0`, that Xschem source measured **1.265 MHz**, confirming the
+master switch still disconnects the bank in the updated variant.
+
+The isolated GF physical probe now contains both 5 × 5 µm and 7 × 7 µm
+MIM PCells plus the poly resistor. Magic extraction recognized both MIM
+dimensions and the resistor; Magic and native KLayout each reported zero
+DRC errors/items. The intermediate widths and full RCO placement,
+routing, LVS, and PEX remain unverified.
+
 SKY AC spot checks at codes 146 and 147 gave 1346.829 and 1355.673 fF.
 A full SKY AC sweep is deferred: the installed SKY model took about 13–20 s
 per code on this 8 GB Mac, while its two native transient checks already
@@ -221,6 +250,8 @@ python3 examples/rco/validate_passives.py sky130
 python3 examples/rco/validate_passives.py gf180
 python3 examples/rco/sweep_trim.py gf180 200 225 --workers 2
 python3 examples/rco/analyze_bank.py gf180 --bank-style binary --workers 2
+python3 examples/rco/sweep_trim.py gf180 112 120 --bank-style balanced --workers 2
+python3 examples/rco/analyze_bank.py gf180 --bank-style balanced --workers 2
 ```
 
 In Chip Lab, choose **Nine-bit RCO** from the circuit menu, then switch
