@@ -167,8 +167,21 @@ def rco_data(process: str, selected_run: str | None = None) -> dict:
                          report["waveform_sha256"] != digest(waveform))):
                     continue
                 values = report["measurements"]
+                passive_kind = report.get("passives", "ideal")
+                if (passive_kind == "pdk" and
+                        ((process == "gf180" and
+                          ("cap_mim_1f5_m4m5_noshield" in netlist.read_text() or
+                           "ppolyf_u_2k" in netlist.read_text())) or
+                         (process == "sky130" and
+                          "sky130_fd_pr__res_xhigh_po_0p35" in netlist.read_text()))):
+                    passive_kind = "pdk_legacy"
                 runs.append({"id": path.name, "code": int(report["code"]),
                              "main": bool(report["main"]),
+                             "passives": passive_kind,
+                             "bank_style": report.get("bank_style", "binary"),
+                             "schematic": report.get("schematic", "generated"),
+                             "schematic_sha256": report.get("schematic_sha256"),
+                             "xschem_export_sha256": report.get("xschem_export_sha256"),
                              "frequency_hz": float(values["frequency_hz"]),
                              "frequency_error_pct": float(values["frequency_error_pct"]),
                              "vhigh_v": float(values["vhigh_v"]),
@@ -176,6 +189,7 @@ def rco_data(process: str, selected_run: str | None = None) -> dict:
                              "period_s": float(values["period_s"]),
                              "duty_cycle_pct": (float(values["duty_cycle_pct"])
                                                 if "duty_cycle_pct" in values else None),
+                             "core_supply_power_w": values.get("core_supply_power_w"),
                              "late_rising_edges": values.get("late_rising_edges"),
                              "period_spread_pct": values.get("period_spread_pct"),
                              "supply_v": float(report["supply_v"]),
@@ -192,15 +206,21 @@ def rco_data(process: str, selected_run: str | None = None) -> dict:
     runs.sort(key=lambda item: item["modified"], reverse=True)
     if not runs:
         return {"process": process, "runs": [], "selected": None,
+                "passive_probe": rco_passive_probe_data(process),
                 "scope": "No RCO schematic simulation has been recorded for this PDK."}
     if selected_run:
         selected = next((item for item in runs if item["id"] == selected_run), None)
         if selected is None:
             raise ValueError("RCO run not found for this process")
     else:
-        candidates = [item for item in runs if item["main"]]
+        candidates = [item for item in runs if item["main"] and
+                      item["passives"] == "pdk" and item["bank_style"] == "binary"]
+        if not candidates:
+            candidates = [item for item in runs if item["main"] and item["passives"] == "pdk"]
+        if not candidates:
+            candidates = [item for item in runs if item["main"]]
         selected = min(candidates or runs,
-                       key=lambda item: abs(item["frequency_error_pct"]))
+                       key=lambda item: round(abs(item["frequency_error_pct"]), 2))
     path = folder / selected["id"]
     rows = []
     for line in (path / "waveform.dat").read_text().splitlines()[1:]:
@@ -218,11 +238,111 @@ def rco_data(process: str, selected_run: str | None = None) -> dict:
     samples = [[round(row[0] * 1e6, 6), *[round(v, 6) for v in row[1:]]]
                for row in rows[::stride]]
     return {"process": process, "runs": runs, "selected": selected,
+            "passive_probe": rco_passive_probe_data(process),
+            "bank_ac": rco_bank_ac_data(process, selected["bank_style"]),
             "samples": samples, "netlist": (path / "rco.spice").read_text(),
             "run_path": str(path),
-            "scope": "Native arm64 Mac ngspice schematic simulation with pinned PDK MOS "
-                     "models and ideal resistors/capacitors. No RCO layout, DRC, LVS, "
-                     "PEX, corner sweep, or silicon measurement is recorded."}
+            "schematic_source": str(ROOT / "examples" / "rco" / process / "rco.sch"),
+            "scope": ("Native arm64 Mac ngspice schematic simulation with pinned PDK MOS "
+                      "and " + ("PDK resistor/MIM capacitor" if selected["passives"] == "pdk"
+                                else "retired passive choice" if selected["passives"] == "pdk_legacy"
+                                else "ideal resistor/capacitor") + " models. The 1 GΩ bleed "
+                      "resistors and 1 pF output load are testbench elements. No full RCO layout "
+                      "or its DRC, LVS, PEX, corner sweep, or silicon measurement is recorded." +
+                      (" This retired passive choice did not pass the current physical-device audit."
+                       if selected["passives"] == "pdk_legacy" else ""))}
+
+
+def rco_passive_probe_data(process: str) -> dict | None:
+    folder = RUNS / "rco" / "passive_probe" / process
+    if not folder.is_dir():
+        return None
+    reports = sorted((path / "report.json" for path in folder.iterdir()
+                      if path.is_dir() and UUID.fullmatch(path.name)),
+                     key=lambda path: path.stat().st_mtime if path.is_file() else 0,
+                     reverse=True)
+    for report_file in reports:
+        if not report_file.is_file():
+            continue
+        try:
+            report = json.loads(report_file.read_text())
+            gds = report_file.parent / "rco_passive_probe.gds"
+            extracted = report_file.parent / "rco_passive_probe.spice"
+            if (report.get("status") == "pass" and report.get("process") == process and
+                    report.get("magic_drc_errors") == 0 and
+                    report.get("klayout_drc_items") == 0 and
+                    report.get("gds_sha256") == digest(gds) and
+                    report.get("extracted_sha256") == digest(extracted)):
+                marker = report_file.parent / ("klayout_drc.xml" if process == "sky130"
+                                                else "full.lyrdb")
+                return {"status": "pass", "magic_drc_errors": 0,
+                        "klayout_drc_items": 0, "models": report["models"],
+                        "layout": str(gds), "markers": str(marker),
+                        "gds_sha256": report["gds_sha256"],
+                        "report": str(report_file),
+                        "scope": report["scope"]}
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            continue
+    return None
+
+
+def rco_bank_ac_data(process: str, bank_style: str) -> dict | None:
+    folder = RUNS / "rco" / "bank_ac" / process
+    if not folder.is_dir():
+        return None
+    reports = sorted((path / "report.json" for path in folder.iterdir()
+                      if path.is_dir() and UUID.fullmatch(path.name)),
+                     key=lambda path: path.stat().st_mtime if path.is_file() else 0,
+                     reverse=True)
+    for report_file in reports:
+        if not report_file.is_file():
+            continue
+        try:
+            report = json.loads(report_file.read_text())
+            points = report["points"]
+            if (report.get("status") != "measured" or
+                    report.get("process") != process or
+                    report.get("bank_style") != bank_style or
+                    report.get("sample_count") != 512 or len(points) != 512 or
+                    report.get("ac_frequency_hz") != 512000 or
+                    report.get("host") != {"system": "Darwin", "arch": "arm64"} or
+                    any(point.get("code") != i or
+                        not math.isfinite(point["effective_cap_f"]) or
+                        point["effective_cap_f"] <= 0
+                        for i, point in enumerate(points))):
+                continue
+            return {"points": [[point["code"], round(point["effective_cap_f"] * 1e15, 5)]
+                               for point in points],
+                    "reversed_steps": report["reversed_cap_steps"],
+                    "bias_v": report["bias_v"], "frequency_hz": report["ac_frequency_hz"],
+                    "model_tree_sha256": report["model_tree_sha256"],
+                    "report_sha256": digest(report_file), "run": str(report_file.parent),
+                    "scope": report["scope"]}
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            continue
+    return None
+
+
+def open_rco_passive_probe(process: str) -> dict:
+    if process not in PROCESSES:
+        raise ValueError("Unknown process")
+    probe = rco_passive_probe_data(process)
+    if probe is None:
+        raise ValueError("Validated passive test cell is unavailable")
+    executable = shutil.which("klayout")
+    if not executable:
+        raise ValueError("Native KLayout is not installed")
+    pdk = PROCESSES[process]["pdk"]
+    lyp_name = "sky130A.lyp" if process == "sky130" else "gf180mcu.lyp"
+    lyp = PDK_ROOT / pdk / "libs.tech" / "klayout" / "tech" / lyp_name
+    if not lyp.is_file():
+        raise ValueError("PDK layer display file is missing")
+    handle = subprocess.Popen([executable, "-e", "-l", str(lyp), probe["layout"],
+                               "-m", probe["markers"]], cwd=ROOT,
+                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, start_new_session=True)
+    return {"pid": handle.pid, "layout": probe["layout"],
+            "scope": probe["scope"]}
 
 
 def report_data(process: str, run_id: str) -> dict:
@@ -439,8 +559,15 @@ def schematic_data(process: str) -> dict:
             "scope": "Editable Xschem source; existing validation runs use their pinned SPICE input"}
 
 
-def open_xschem(process: str) -> dict:
-    source = schematic_source(process)
+def open_xschem(process: str, circuit: str = "inverter") -> dict:
+    if circuit == "inverter":
+        source = schematic_source(process)
+    elif circuit == "rco" and process in PROCESSES:
+        source = ROOT / "examples" / "rco" / process / "rco.sch"
+        if not source.is_file():
+            raise ValueError("Editable RCO Xschem source is missing")
+    else:
+        raise ValueError("Choose inverter or rco")
     executable = shutil.which("xschem")
     if not executable:
         raise ValueError("Native Xschem is not installed")
@@ -451,7 +578,7 @@ def open_xschem(process: str) -> dict:
     env = dict(os.environ, PDK_ROOT=str(PDK_ROOT), PWD=str(pdk_dir), DISPLAY=display)
     log_dir = RUNS / "dashboard" / "native-xschem"
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / f"{process}-gui.log"
+    log_path = log_dir / f"{process}-{circuit}-gui.log"
     with log_path.open("ab") as log:
         handle = subprocess.Popen([executable, "--rcfile", str(pdk_dir / "xschemrc"),
                                    str(source)], cwd=pdk_dir, env=env,
@@ -988,21 +1115,31 @@ def start_validation(process: str, layout_variant: str = "standard") -> str:
     return job_id
 
 
-def start_rco(process: str, code: object, main: object) -> str:
-    if process not in PROCESSES or type(code) is not int or not 0 <= code <= 511 or type(main) is not bool:
+def start_rco(process: str, code: object, main: object, passives: object = "pdk",
+              schematic: object = "generated", bank_style: object = "binary") -> str:
+    if (process not in PROCESSES or type(code) is not int or not 0 <= code <= 511 or
+            type(main) is not bool or passives not in ("ideal", "pdk") or
+            schematic not in ("generated", "xschem") or
+            bank_style not in ("binary", "guarded") or
+            (schematic == "xschem" and (passives != "pdk" or bank_style != "binary"))):
         raise ValueError("Choose a process, a nine-bit code (0–511), and a main-switch state")
     with JOB_LOCK:
         if any(job["state"] == "running" for job in JOBS.values()):
             raise ValueError("Another lab tool run is already in progress")
         job_id = str(uuid.uuid4())
         JOBS[job_id] = {"id": job_id, "kind": "rco", "process": process,
-                        "code": code, "main": main, "state": "running"}
+                        "code": code, "main": main, "passives": passives,
+                        "schematic": schematic, "bank_style": bank_style,
+                        "state": "running"}
 
     def execute() -> None:
         command = [sys.executable, str(ROOT / "examples" / "rco" / "run.py"), process,
-                   str(code)]
+                   str(code), "--passives", passives]
         if not main:
             command.append("--main-off")
+        if schematic == "xschem":
+            command.append("--xschem")
+        command += ["--bank-style", bank_style]
         try:
             result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
                                     timeout=240, check=False)
@@ -1138,13 +1275,18 @@ class Handler(BaseHTTPRequestHandler):
                     payload.get("layout_variant", "standard"))})
             if self.path == "/api/rco-simulate":
                 return self.reply(202, {"job_id": start_rco(payload.get("process"),
-                    payload.get("code"), payload.get("main"))})
+                    payload.get("code"), payload.get("main"), payload.get("passives", "pdk"),
+                    payload.get("schematic", "generated"),
+                    payload.get("bank_style", "binary"))})
             if self.path == "/api/open-klayout":
                 return self.reply(200, open_klayout(payload.get("process"),
                                                     payload.get("run"),
                                                     payload.get("variant", "connected")))
             if self.path == "/api/open-xschem":
-                return self.reply(200, open_xschem(payload.get("process")))
+                return self.reply(200, open_xschem(payload.get("process"),
+                                                   payload.get("circuit", "inverter")))
+            if self.path == "/api/open-rco-passive-probe":
+                return self.reply(200, open_rco_passive_probe(payload.get("process")))
             if self.path == "/api/simulate-schematic":
                 return self.reply(200, simulate_schematic(payload))
             return self.reply(404, {"error": "Unknown action"})

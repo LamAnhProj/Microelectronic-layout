@@ -66,7 +66,7 @@ function renderSchematic(){const report=state.report;if(!report)return;const spe
 function renderVerification(){const report=state.report;if(!report)return;const c=report.checks||{},cards=$('verification-cards');clear(cards);for(const [title,value,sub,cls] of [['Magic DRC',`${magicValue()??'—'} errors`,'Worker layout check',magicValue()===0?'check-good':'check-warn'],['Native KLayout',`${drcValue()??'—'} items`,'Full vendor rule deck on Mac',drcValue()===0?'check-good':'check-warn'],['Netgen LVS',lvsValue()?.includes('unique match')?'UNIQUE MATCH':'INSPECT','2 devices · 4 nets',lvsValue()?.includes('unique match')?'check-good':'check-warn']]){const card=add(cards,'div',undefined,'verification-card');add(card,'div',title,'title');add(card,'div',value,`value ${cls}`);add(card,'div',sub,'sub');}
   const checks=$('checks-table');clear(checks);const entries=state.process==='sky130'?[['Connected Magic DRC',c.magic_full_drc_errors===0?'0 errors':'Inspect'],['Connected KLayout DRC',c.native_klayout_drc_items===0?'0 items':'Inspect'],['Negative DRC control',`${c.negative_drc_errors??'—'} error detected`],['Negative LVS control',c.negative_lvs||'—'],['GDS export feedback',String(c.gds_export_feedback??'—')]]:[['Connected Magic DRC',c.magic_connected_drc_errors===0?'0 errors':'Inspect'],['Connected KLayout DRC',c.native_klayout_connected_full_drc_items===0?'0 items':'Inspect'],['Default PCell Magic DRC',`${c.magic_default_pcell_drc_errors??'—'} errors`],['Default PCell KLayout metal1',`${c.native_klayout_default_pcell_metal1_items??'—'} items`],['Disconnected probe LVS',c.probe_lvs||'—'],['Wrong-bulk LVS control',c.negative_lvs||'—']];for(const [label,value] of entries){const item=add(checks,'div',undefined,'check-row');add(item,'span',label);add(item,'strong',value,value==='0 errors'||value==='0 items'?'check-good':value.includes('mismatch')||value.includes('rejected')||value.includes('detected')?'check-warn':'');}
   const limits=$('unresolved-list');clear(limits);const fallback=report.checks?.rc_network?['No antenna or density signoff','Open-PDK R-C extraction is not foundry signoff','No silicon measurement']:['No antenna or density signoff','No distributed wire resistance in extraction','No foundry qualification or silicon measurement'];for(const item of report.unresolved||fallback)add(limits,'div',item,'interpretation-item');const select=$('artifact-select');clear(select);for(const name of report.artifacts||[]){const opt=add(select,'option',name);opt.value=name;}if([...select.options].some(o=>o.value==='inverter.spice'))select.value='inverter.spice';$('artifact-content').textContent='Select an artifact to inspect its text.';}
-function rcoRunLabel(item){return `Code ${item.code} · MAIN ${item.main?'on':'off'} · ${(item.frequency_hz/1000).toFixed(2)} kHz · ${item.id.slice(0,8)}`;}
+function rcoRunLabel(item){return `${item.schematic==='xschem'?'Xschem':'Generated'} · ${item.passives==='pdk'?'PDK R/C':item.passives==='pdk_legacy'?'Retired passives':'Ideal R/C'} · ${item.bank_style} · code ${item.code} · MAIN ${item.main?'on':'off'} · ${(item.frequency_hz/1000).toFixed(2)} kHz · ${item.id.slice(0,8)}`;}
 function drawRcoPlot(){
   if(state.view!=='rco'||!state.rco?.samples?.length)return;
   const rows=state.rco.samples,canvas=$('rco-canvas'),{ctx,w,h}=canvasSetup(canvas),pad={l:55,r:18,t:20,b:38};
@@ -82,30 +82,62 @@ function drawRcoPlot(){
     rows.forEach((row,i)=>i?ctx.lineTo(x(row[0]),y(row[col])):ctx.moveTo(x(row[0]),y(row[col])));ctx.stroke();
   }ctx.restore();
 }
+function rcoCapWindow(){const selected=Math.max(0,Math.min(511,Number($('rco-code').value)||0));if($('rco-cap-range').value==='full')return [0,511];const first=Math.max(0,Math.min(495,selected-8));return [first,first+16];}
+function rcoCapCodeAt(clientX,canvas){const [first,last]=rcoCapWindow(),box=canvas.getBoundingClientRect();return Math.max(first,Math.min(last,Math.round(first+(clientX-box.left-58)/(box.width-76)*(last-first))));}
+function drawRcoCapPlot(){
+  if(state.view!=='rco')return;
+  const canvas=$('rco-cap-canvas'),{ctx,w,h}=canvasSetup(canvas),pad={l:58,r:18,t:20,b:38};
+  ctx.fillStyle='#091c27';ctx.fillRect(0,0,w,h);
+  const data=state.rco?.bank_ac,rows=data?.points;
+  if(!rows?.length){ctx.fillStyle='#91afbb';ctx.font='13px ui-sans-serif,sans-serif';ctx.fillText('No 512-code AC bank sweep recorded for this process and bank style.',24,45);return;}
+  const [first,last]=rcoCapWindow(),shown=rows.slice(first,last+1),values=shown.map(row=>row[1]),span=Math.max(1,Math.max(...values)-Math.min(...values)),lo=Math.min(...values)-span*.08,hi=Math.max(...values)+span*.08;
+  const x=code=>pad.l+(code-first)/(last-first)*(w-pad.l-pad.r),y=cap=>h-pad.b-(cap-lo)/(hi-lo)*(h-pad.t-pad.b);
+  ctx.strokeStyle='#294b58';ctx.fillStyle='#91afbb';ctx.lineWidth=1;ctx.font='11px ui-monospace,monospace';
+  for(let i=0;i<=4;i++){const xx=pad.l+i*(w-pad.l-pad.r)/4;ctx.beginPath();ctx.moveTo(xx,pad.t);ctx.lineTo(xx,h-pad.b);ctx.stroke();ctx.fillText(String(Math.round(first+(last-first)*i/4)),xx-12,h-12);const yy=pad.t+i*(h-pad.t-pad.b)/4;ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.fillText((hi-(hi-lo)*i/4).toFixed(0),5,yy+4);}
+  ctx.save();ctx.beginPath();ctx.rect(pad.l,pad.t,w-pad.l-pad.r,h-pad.t-pad.b);ctx.clip();
+  ctx.beginPath();ctx.strokeStyle='#5ad9e9';ctx.lineWidth=1.7;shown.forEach(([code,cap],i)=>i?ctx.lineTo(x(code),y(cap)):ctx.moveTo(x(code),y(cap)));ctx.stroke();
+  ctx.strokeStyle='#ff8b83';ctx.lineWidth=3;for(const step of data.reversed_steps){if(step.from<first||step.to>last)continue;const a=rows[step.from],b=rows[step.to];ctx.beginPath();ctx.moveTo(x(a[0]),y(a[1]));ctx.lineTo(x(b[0]),y(b[1]));ctx.stroke();}
+  const selected=Number($('rco-code').value);if(Number.isInteger(selected)&&rows[selected]&&selected>=first&&selected<=last){ctx.beginPath();ctx.fillStyle='#ffd17d';ctx.arc(x(selected),y(rows[selected][1]),4,0,Math.PI*2);ctx.fill();}
+  ctx.restore();
+}
 function renderRco(){
   const d=state.rco,select=$('rco-run-select');clear(select);
   if(!d?.selected){$('rco-run-status').textContent='No RCO simulation recorded for this process.';$('rco-scope').textContent=d?.scope||'';return;}
   for(const item of d.runs){const option=add(select,'option',rcoRunLabel(item));option.value=item.id;}
   select.value=d.selected.id;state.rcoRun=d.selected.id;
-  $('rco-code').value=d.selected.code;$('rco-main').checked=d.selected.main;
+  $('rco-code').value=d.selected.code;$('rco-main').checked=d.selected.main;$('rco-passives').value=d.selected.passives==='pdk_legacy'?'pdk':d.selected.passives;$('rco-bank-style').value=d.selected.bank_style;$('rco-xschem').checked=d.selected.schematic==='xschem';
   $('rco-run-status').textContent=`Saved Mac simulation ${d.selected.id.slice(0,8)}`;
   const grid=$('rco-metrics');clear(grid);
   const readings=[['Target','512.000 kHz'],['Measured',`${(d.selected.frequency_hz/1000).toFixed(3)} kHz`],['Error',`${d.selected.frequency_error_pct>=0?'+':''}${d.selected.frequency_error_pct.toFixed(3)}%`],['Oscillator supply',`${d.selected.supply_v.toFixed(1)} V`],['Control level',`${d.selected.control_v.toFixed(1)} V`],['Output swing',`${d.selected.vlow_v.toFixed(3)}–${d.selected.vhigh_v.toFixed(3)} V`]];
   if(d.selected.duty_cycle_pct!=null)readings.push(['Clock duty',`${d.selected.duty_cycle_pct.toFixed(2)}%`]);
+  if(d.selected.core_supply_power_w!=null)readings.push(['Core supply power',`${(d.selected.core_supply_power_w*1e6).toFixed(2)} µW`]);
   for(const [label,value] of readings){const row=add(grid,'div',undefined,'detail');add(row,'div',label,'label');add(row,'div',value,'value');}
   $('rco-scope').textContent=d.scope;
   $('rco-wave-source').textContent=`${d.selected.ngspice_version} · ${d.samples.length.toLocaleString()} samples · GDS/PEX not yet built`;
-  $('rco-run-path').textContent=`${d.run_path}/rco.spice · SHA-256 ${d.selected.netlist_sha256.slice(0,16)}… · waveform ${d.selected.waveform_sha256?.slice(0,16)||'hash not recorded'} · PDK models ${d.selected.model_tree_sha256.slice(0,16)}…`;
+  $('rco-run-path').textContent=`${d.run_path}/rco.spice · SHA-256 ${d.selected.netlist_sha256.slice(0,16)}… · waveform ${d.selected.waveform_sha256?.slice(0,16)||'hash not recorded'} · PDK models ${d.selected.model_tree_sha256.slice(0,16)}…${d.selected.schematic_sha256?` · Xschem source ${d.selected.schematic_sha256.slice(0,16)}…`:''}`;
+  $('rco-schematic-path').textContent=d.schematic_source;
+  const probe=d.passive_probe;
+  $('rco-open-passive-probe').disabled=!probe;
+  $('rco-passive-probe').textContent=probe?`Isolated cell: Magic DRC ${probe.magic_drc_errors} errors; native KLayout DRC ${probe.klayout_drc_items} items. Extracted: ${probe.models.join(' · ')}. GDS SHA-256 ${probe.gds_sha256.slice(0,16)}…`:'No passive-device GDS check recorded for this process.';
+  const byCode=new Map();for(const item of d.runs){if(item.passives==='pdk'&&item.main&&item.bank_style===d.selected.bank_style&&!byCode.has(item.code))byCode.set(item.code,item);}
+  const trimPoints=[...byCode.values()].sort((a,b)=>a.code-b.code),adjacent=[],reversed=[];
+  for(let i=1;i<trimPoints.length;i++){const a=trimPoints[i-1],b=trimPoints[i];if(b.code!==a.code+1)continue;adjacent.push([a,b]);if(b.frequency_hz>=a.frequency_hz)reversed.push([a,b]);}
+  $('rco-trim-check').textContent=adjacent.length?`${adjacent.length} measured adjacent pairs; ${reversed.length} run opposite to the expected lower-frequency direction.${reversed.length?` Reversals: ${reversed.slice(0,8).map(([a,b])=>`${a.code}→${b.code}: ${(a.frequency_hz/1000).toFixed(3)}→${(b.frequency_hz/1000).toFixed(3)} kHz`).join(' · ')}${reversed.length>8?` · ${reversed.length-8} more`:''}.`:''}`:'No adjacent current-PDK trim codes have been measured yet.';
+  $('rco-cap-scope').textContent=d.bank_ac?`${d.bank_ac.scope} ${d.bank_ac.reversed_steps.length} of 511 AC capacitance steps reverse direction. Click the graph to load a code; run a transient separately.`:'No complete 512-code AC sweep recorded for this process and selected bank style.';
+  $('rco-cap-hover').textContent=d.bank_ac?`512 codes · ${d.bank_ac.reversed_steps.length} reversed AC steps`:'AC sweep pending';
   $('rco-netlist').textContent=d.netlist;
   const log=$('rco-design-log');clear(log);
-  const baseline=d.runs.find(item=>item.code===100&&item.main),near=d.runs.find(item=>item.code===(state.process==='sky130'?164:137)&&item.main),off=d.runs.find(item=>!item.main);
+  const baseline=d.runs.find(item=>item.code===100&&item.main&&item.passives==='ideal'),near=d.runs.find(item=>item.code===(state.process==='sky130'?164:137)&&item.main&&item.passives==='ideal'),off=d.runs.find(item=>!item.main&&item.passives===d.selected.passives&&item.bank_style===d.selected.bank_style);
   analysisCard(log,'1 · Choose the loop',`Three CMOS inversions make a ring. At 512 kHz, its average stage delay needs to be about 1/(6 × 512 kHz) = 325.5 ns. A 470 kΩ resistor and roughly 1 pF node capacitance are a starting estimate.`);
   analysisCard(log,'2 · Start from an RC estimate',`Code 100 gives 1.0 pF of ideal base-plus-bank capacitance per stage. ${baseline?`The PDK-model simulation measured ${(baseline.frequency_hz/1000).toFixed(1)} kHz, faster than target.`:'The first code-100 simulation has not been saved for this process.'} The formula omits switch and transistor behavior.`);
   analysisCard(log,'3 · Add switched capacitance',`${near?`Code ${near.code} measured ${(near.frequency_hz/1000).toFixed(1)} kHz.`:'A near-target bank code has not been recorded.'} More capacitance slows the RC crossing at each inverter input. The selected code ${d.selected.code} measures ${(d.selected.frequency_hz/1000).toFixed(3)} kHz on ${state.overview.processes[state.process].title}.`);
   analysisCard(log,'4 · Check the main PMOS/NMOS gate',`${off?`With the bank disconnected, the recorded frequency is ${(off.frequency_hz/1000).toFixed(1)} kHz.`:'The master-switch-off control has not been tested.'} This tests bank selection; the gate does not adjust the inverter voltage threshold.`);
-  analysisCard(log,'5 · Why the PDKs use different codes','SKY130A and GF180MCU D have different MOS models, supply voltages, switching points, and switch behavior. At the nominal corner, code 169 is closest on SKY130A and code 141 on GF180MCU D. These are measured calibration settings for this ideal-passive prototype.');
-  analysisCard(log,'6 · Physical questions still open','These use PDK MOS models but ideal resistors and capacitors. Next: choose PDK passive devices, draw an editable schematic and layout, check start-up and power across corners, run DRC/LVS, extract parasitics, then calibrate all nine bits again.');
-  requestAnimationFrame(drawRcoPlot);
+  analysisCard(log,'5 · Make the bank manufacturable',`A single 5 fF MIM cell violates GF180's 5 × 5 µm minimum. The PDK variant uses 5 × 5 µm GF option-B 2 fF/µm² or 4.5 × 4.5 µm SKY unit cells. Series chains make the small weights; parallel units make the larger weights. Each SKY stage uses 77 units plus a base MIM; GF uses 61 units plus a base MIM. The two banks need different trim codes.`);
+  analysisCard(log,'6 · Compare passive models',`The selected run uses ${d.selected.passives==='pdk'?'PDK high-resistance poly and MIM models':'ideal 470 kΩ resistors and binary capacitors'} with ${d.selected.bank_style} bank weights. Code ${d.selected.code} measures ${(d.selected.frequency_hz/1000).toFixed(3)} kHz. SKY130A and GF180MCU D need separate calibration because their device values and switch delays differ.`);
+  analysisCard(log,'7 · Check binary carry transitions',`${adjacent.length} adjacent pairs have been measured for the selected bank; ${reversed.length} reversed frequency direction.${reversed.length?` Observed: ${reversed.map(([a,b])=>`${a.code}→${b.code}`).join(', ')}.`:''} ${state.process==='gf180'?'The progressive guard experiment has 112 reversed AC steps and a 37.6 kHz transient gap at 127→128, so it is not the calibrated baseline.':'A full SKY trim sweep is still needed to assess monotonicity.'}`);
+  analysisCard(log,'8 · Audit the passive cells',probe?'One MIM and one high resistance poly cell were drawn with the PDK PCells. Magic extraction recognized the selected models and geometries; both Magic and native KLayout reported zero DRC items for this isolated cell.':'No isolated passive-device GDS check has been recorded.');
+  analysisCard(log,'9 · Physical questions still open','Resolve nine-bit trim monotonicity, then draw and connect the 130 MOS devices, 234 SKY or 186 GF MIM cells, and three poly resistors in a full RCO layout. Run RCO-specific DRC, LVS, PEX, corners, and charge-state checks. The isolated passive DRC does not cover these.');
+  requestAnimationFrame(()=>{drawRcoPlot();drawRcoCapPlot();});
 }
 async function loadRco(runId=null){
   const process=state.process;$('rco-run-status').textContent='Reading hashed Mac simulation…';
@@ -114,11 +146,11 @@ async function loadRco(runId=null){
   state.rco=data;renderRco();
 }
 async function simulateRco(){
-  const code=Number($('rco-code').value),main=$('rco-main').checked,process=state.process,button=$('rco-run-button');
+  const code=Number($('rco-code').value),main=$('rco-main').checked,passives=$('rco-passives').value,bank_style=$('rco-bank-style').value,schematic=$('rco-xschem').checked?'xschem':'generated',process=state.process,button=$('rco-run-button');
   if(!Number.isInteger(code)||code<0||code>511){notice('Choose an integer trimmer code from 0 to 511.',true);return;}
   button.disabled=true;$('rco-run-status').textContent='Running native Mac ngspice with the selected PDK model…';
   try{
-    const data=await api('/api/rco-simulate',{method:'POST',headers:{'Content-Type':'application/json','X-Lab-Token':state.overview.token},body:JSON.stringify({process,code,main})});
+    const data=await api('/api/rco-simulate',{method:'POST',headers:{'Content-Type':'application/json','X-Lab-Token':state.overview.token},body:JSON.stringify({process,code,main,passives,schematic,bank_style})});
     while(true){await new Promise(resolve=>setTimeout(resolve,2000));const job=await api(query('/api/job',{id:data.job_id}));if(job.state==='running')continue;
       if(job.state==='complete'){if(process===state.process&&state.view==='rco')await loadRco(job.run_id);notice(`RCO code ${code} measured and saved as ${job.run_id.slice(0,8)}.`);}
       else throw new Error(job.output||'RCO simulation failed');break;}
@@ -675,8 +707,17 @@ function attachRcoEvents(){
   $('process-select').addEventListener('change',()=>{state.rcoRun=null;if(state.view==='rco')loadRco().catch(err=>notice(err.message,true));});
   $('rco-run-select').addEventListener('change',event=>loadRco(event.target.value).catch(err=>notice(err.message,true)));
   $('rco-run-button').addEventListener('click',simulateRco);
+  $('rco-xschem').addEventListener('change',event=>{if(event.target.checked){$('rco-passives').value='pdk';$('rco-bank-style').value='binary';}});
+  $('rco-passives').addEventListener('change',event=>{if(event.target.value==='ideal')$('rco-xschem').checked=false;});
+  $('rco-bank-style').addEventListener('change',event=>{if(event.target.value==='guarded')$('rco-xschem').checked=false;});
+  $('rco-open-xschem').addEventListener('click',async()=>{try{const result=await api('/api/open-xschem',{method:'POST',headers:{'Content-Type':'application/json','X-Lab-Token':state.overview.token},body:JSON.stringify({process:state.process,circuit:'rco'})});notice(`Opened ${result.source} in native Xschem.`);}catch(err){notice(err.message,true);}});
+  $('rco-open-passive-probe').addEventListener('click',async()=>{try{const result=await api('/api/open-rco-passive-probe',{method:'POST',headers:{'Content-Type':'application/json','X-Lab-Token':state.overview.token},body:JSON.stringify({process:state.process})});notice(`Opened isolated passive test cell in KLayout: ${result.layout}`);}catch(err){notice(err.message,true);}});
   for(const input of document.querySelectorAll('[data-rco-signal]'))input.addEventListener('change',()=>{const bit=Number(input.dataset.rcoSignal);input.checked?state.rcoSignals.add(bit):state.rcoSignals.delete(bit);drawRcoPlot();});
-  window.addEventListener('resize',()=>{if(state.view==='rco')drawRcoPlot();});
+  $('rco-cap-range').addEventListener('change',drawRcoCapPlot);
+  $('rco-code').addEventListener('change',drawRcoCapPlot);
+  $('rco-cap-canvas').addEventListener('pointermove',event=>{const rows=state.rco?.bank_ac?.points;if(!rows)return;const code=rcoCapCodeAt(event.clientX,event.currentTarget),delta=code<511?rows[code+1][1]-rows[code][1]:null;$('rco-cap-hover').textContent=`Code ${code}: ${rows[code][1].toFixed(3)} fF${delta!=null?` · next Δ ${delta>=0?'+':''}${delta.toFixed(3)} fF${delta<0?' reversal':''}`:''}`;});
+  $('rco-cap-canvas').addEventListener('click',event=>{const rows=state.rco?.bank_ac?.points;if(!rows)return;const code=rcoCapCodeAt(event.clientX,event.currentTarget);$('rco-code').value=code;drawRcoCapPlot();});
+  window.addEventListener('resize',()=>{if(state.view==='rco'){drawRcoPlot();drawRcoCapPlot();}});
 }
 async function init(){try{state.overview=await api('/api/overview');const select=$('process-select');for(const [id,spec] of Object.entries(state.overview.processes)){const opt=add(select,'option',spec.title);opt.value=id;}select.value=state.process;$('exp-voltage').value=state.overview.processes[state.process].voltage;selectRun();renderDocList();attachEvents();attachEvidenceEvents();attachWorkbenchEvents();attachSchematicEvents();attachRcEvents();attachComparisonEvents();attachRcoEvents();await loadRun();}catch(err){notice(`Dashboard failed to load: ${err.message}`,true);}}
 init();

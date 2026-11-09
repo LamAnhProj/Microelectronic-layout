@@ -81,9 +81,9 @@ require a physically large capacitor. DNL/INL and usable resolution need PEX.
 5. Record source/PDK hashes and simulator logs for both PDKs. A nominal pass is
    not a process-corner, mismatch, DRC, LVS, PEX, or silicon pass.
 
-The first netlist and bench are built from `run.py`. Layout, physical capacitor
-and resistor selection, DRC/LVS, extracted RC, temperature/corner sweep, tuning
-range, and power remain open for this circuit.
+The first netlist and bench are built from `run.py`. The v1 PDK passive device
+experiment and editable source are described below. Layout, DRC/LVS,
+extracted RC, temperature/corner sweep, tuning range, and power remain open.
 
 ## Design log: decisions and observed adjustments
 
@@ -101,7 +101,7 @@ The latest nominal runs measured 49.29% clock duty on SKY130A and 48.82% on
 GF180MCU D. Their late-cycle period spread was below 0.002%. The waveform and
 simulator-log hashes are recorded with the netlist and model-tree hashes.
 
-These measurements are from **native ngspice 47 on the user's arm64 Mac**, using
+These v0 measurements are from **native ngspice 47 on the user's arm64 Mac**, using
 the pinned Volare PDK transistor models at their nominal corners. The caps and
 resistors are ideal SPICE elements, so the frequency and 9-bit behavior have
 not yet been validated with PDK passive devices or a physical layout. The GF180
@@ -109,3 +109,122 @@ oscillator uses 3.3 V while its control inputs are 1.8 V; the cross-coupled
 level shifters translate their outputs to the oscillator domain. The two
 different nominal codes are calibration observations, not process-wide trim
 settings. See the ignored `runs/rco/<uuid>/` reports for full hashes and logs.
+
+## v1 PDK passive experiment (native Mac)
+
+The `--passives pdk` mode replaces the three ideal delay resistors and 30
+circuit capacitors with named PDK devices. The 1 pF output load and 1 GΩ
+bleeders are **testbench aids**. A single 5 fF MIM cell is not legal in GF180
+option B because its minimum plate is 5 × 5 µm. The bank therefore builds
+small effective weights from series MIMs and large weights from parallel MIMs.
+SKY has 77 unit cells plus one base MIM per stage (234 total); GF has 61 units
+plus one base MIM per stage (186 total). These are SPICE connections, not a
+routed physical array.
+
+| Process | Extractable resistor per stage | Extractable unit MIM | Base MIM | Closest measured code | Native nominal result |
+| --- | --- | --- | --- | --- | --- |
+| SKY130A | `res_xhigh_po_1p41`, 1.41 × 330 µm | `cap_mim_m3_2`, 4.5 × 4.5 µm | 15.7 × 15.7 µm | 146 | 512.863 kHz (+0.169%) |
+| GF180MCU D | `ppolyf_u_1k`, 1 × 440 µm | option-B `cap_mim_2f0_m4m5_noshield`, 5 × 5 µm | 15.6 × 15.6 µm | 211 | 512.308 kHz (+0.060%) |
+
+The first modeled choices were rejected during physical cross-checks. GF
+Magic extracts the option-B MIM as 2.0 fF/µm², not the earlier 1.5 fF/µm²
+model; it also supports the 1 kΩ/square high resistance poly PCell, not the
+earlier 2 kΩ/square choice. On SKY, KLayout found `urpm.1a` on the original
+0.35 µm poly resistor PCell even though Magic DRC reported zero. The wider
+1.41 µm PCell passes both. The dashboard labels old runs as retired rather
+than presenting their frequency as current physical-device evidence.
+
+At the current binary-bank codes, opening `MAIN` gave 1.244 MHz on SKY and
+1.265 MHz on GF. Nominal core-supply power from the late transient was
+40.19 µW and 505.26 µW respectively; this excludes the separate digital
+control sources. The GF resistor has nominal sheet geometry near 440 kΩ,
+whereas SKY's is near 468 kΩ; the PDK models determine the actual behavior.
+All results are from ngspice 47 on the user's arm64 Mac at 25 °C, with
+per-run source, model, netlist, log, and waveform hashes in ignored `runs/rco/`.
+
+### Editable Xschem circuit and testbench
+
+`python3 -m examples.rco.generate_xschem` rebuilds the PDK-symbol sources at
+`sky130/rco.sch` and `gf180/rco.sch`. The generator checks the exported nets
+of 65 NMOS, 65 PMOS, three resistors, and 234 SKY or 186 GF MIM cells against
+the binary-bank circuit model. Native Xschem opens these named-net drawings
+through the dashboard. The **Simulate editable Xschem source** option exports
+the current `.sch`, inserts its device lines into the same stimulus and
+measurement bench, and records the schematic and export hashes. It measured
+512.863 kHz on SKY at code 146 and 512.310 kHz on GF at code 211, within
+2 Hz of the generated-netlist runs. This is a schematic translation check,
+not physical LVS.
+
+### Isolated physical passive audit
+
+`python3 examples/rco/validate_passives.py sky130` and the `gf180` form draw
+one MIM and one high resistance poly PCell, export GDS, extract SPICE, and run
+Magic plus native KLayout DRC. Both current test cells had **zero Magic DRC
+errors and zero KLayout DRC items**. Magic extracted the same passive names
+and dimensions listed above. Each run has a hashed report under ignored
+`runs/rco/passive_probe/<process>/<uuid>/`. The RCO page can open this
+isolated GDS and its marker database in KLayout. These checks say nothing
+about the full oscillator's wiring, DRC, LVS, or PEX.
+
+### Nine-bit trim hole and next physical stage
+
+The GF binary bank is **not monotonic** in measured transient tests. The
+frequency rose when advancing 207→208, 211→212, 223→224, and 255→256.
+For example, 211 measured 512.308 kHz while 212 measured 512.794 kHz. The
+series MIM weights, switch parasitics, and capacitance voltage dependence
+need a bank redesign or calibrated code map before claiming 512 ordered steps.
+In a bounded native transient sweep of **all codes 200–225**, six of 25
+adjacent steps reversed direction (203→204, 207→208, 211→212, 215→216,
+219→220, and 223→224). Code 211 was the closest point in that range:
+512.308 kHz, +0.060% relative to target. The sweep saved every netlist,
+waveform, log, and report under ignored `runs/rco/sweeps/`; it checks nominal
+transient behavior only and is not a full trim characterization.
+A `--bank-style guarded` experiment progressively enlarged higher GF MIMs.
+It repaired those sampled carry transitions, but made a 37.59 kHz gap between
+codes 127 (518.855 kHz) and 128 (481.266 kHz), so it is not the baseline.
+The dashboard keeps binary and guarded runs separate; a full 512-code transient sweep,
+DNL/INL, temperature/corner checks, and charge-state testing remain open.
+
+A full **small-signal AC bank sweep** at a fixed mid-supply bias found
+127 reversed effective-capacitance steps out of 511 on GF's binary bank.
+At codes 211→212, its effective capacitance fell from 1318.764 to
+1316.446 fF; the oscillator frequency rose at the same transition. The
+progressive guard still had 112 reversed AC steps, despite fixing a few
+sampled transient carries. These AC runs use the PDK MOS/MIM models and
+control restoration but exclude the oscillating loop, resistor, charge
+history, and layout. The dashboard plots all 512 GF points and lets a click
+load a physical trim code. The native Mac reports and per-code decks are in
+ignored `runs/rco/bank_ac/gf180/<uuid>/`.
+
+SKY AC spot checks at codes 146 and 147 gave 1346.829 and 1355.673 fF.
+A full SKY AC sweep is deferred: the installed SKY model took about 13–20 s
+per code on this 8 GB Mac, while its two native transient checks already
+confirm the local frequency direction. The 512-code AC sweep would take
+roughly an hour at two concurrent workers.
+
+The full RCO has **no routed GDS, RCO DRC/LVS, or RCO PEX yet**. The inverter's
+previous physical checks and these isolated passive-cell checks cannot be
+used as RCO signoff. The next layout stage must place and connect the 130 MOS
+and 234/186 MIMs, then verify connectivity and extracted behavior before any
+post-layout 512 kHz claim.
+
+## Reproduce the current Mac checks
+
+Run these from the repository root. Each command writes a new private,
+ignored report under `runs/rco/` and prints its location. The full GF AC bank
+sweep runs 512 PDK simulations; the bounded transient sweep runs 26.
+
+```sh
+python3 examples/rco/run.py sky130 146 --passives pdk --xschem
+python3 examples/rco/run.py gf180 211 --passives pdk --xschem
+python3 examples/rco/validate_passives.py sky130
+python3 examples/rco/validate_passives.py gf180
+python3 examples/rco/sweep_trim.py gf180 200 225 --workers 2
+python3 examples/rco/analyze_bank.py gf180 --bank-style binary --workers 2
+```
+
+In Chip Lab, choose **Nine-bit RCO** from the circuit menu, then switch
+between SKY130A and GF180MCU D. The saved-run selector loads measured
+waveforms and the exact SPICE testbench. The bank graph shows the AC
+diagnostic; red segments identify reversed capacitance steps. The graph is
+centered on the selected code and can be expanded to all 512 codes.

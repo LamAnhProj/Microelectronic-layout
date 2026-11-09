@@ -25,6 +25,33 @@ class RcoNetlistTests(unittest.TestCase):
         self.assertGreater(simulation_stop_us(511, True), simulation_stop_us(169, True))
         self.assertEqual(simulation_stop_us(169, False), 60)
 
+    def test_pdk_bank_uses_mim_series_and_parallel_weights(self):
+        for process, unit, resistor in (
+            ("sky130", "sky130_fd_pr__cap_mim_m3_2 w=4.5 l=4.5",
+             "sky130_fd_pr__res_xhigh_po_1p41 w=1.41 l=330"),
+            ("gf180", "cap_mim_2f0_m4m5_noshield c_width=5u c_length=5u",
+             "ppolyf_u_1k r_width=1u r_length=440u"),
+        ):
+            deck = build_netlist(process, 154, passives="pdk", bank_style="binary")
+            self.assertEqual(deck.count(unit), 231 if process == "sky130" else 183)
+            self.assertEqual(deck.count(resistor), 3)
+            self.assertEqual(len(re.findall(r"^XCBASE\d+ ", deck, re.M)), 3)
+            for stage in range(3):
+                for bit in range(9):
+                    count = len(re.findall(rf"^XC{stage}_{bit}_\d+_\d+ ", deck, re.M))
+                    self.assertEqual(count, 1 << abs(bit - (3 if process == "sky130" else 4)))
+            self.assertNotIn("RDELAY0 d0 n0 470k", deck)
+
+    def test_guarded_gf_bank_enlarges_higher_mim_bits(self):
+        deck = build_netlist("gf180", 211, passives="pdk", bank_style="guarded")
+        matches = re.findall(
+            r"^XC0_(\d+)_0_0 \S+ \S+ cap_mim_2f0_m4m5_noshield c_width=([\d.]+)u",
+            deck, re.M)
+        widths = [float(width) for _, width in matches]
+        self.assertEqual(len(widths), 9)
+        self.assertEqual(widths[0], 5.0)
+        self.assertTrue(all(b > a for a, b in zip(widths, widths[1:])))
+
 
 if __name__ == "__main__":
     unittest.main()
