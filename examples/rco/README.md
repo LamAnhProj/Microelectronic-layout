@@ -82,8 +82,9 @@ require a physically large capacitor. DNL/INL and usable resolution need PEX.
    not a process-corner, mismatch, DRC, LVS, PEX, or silicon pass.
 
 The first netlist and bench are built from `run.py`. The v1 PDK passive device
-experiment and editable source are described below. Layout, DRC/LVS,
-extracted RC, temperature/corner sweep, tuning range, and power remain open.
+experiment and editable source are described below. Later sections record
+placement DRC, sampled corner searches, tuning, and power. Connected-layout
+DRC/LVS and extracted R/C remain open.
 
 ## Design log: decisions and observed adjustments
 
@@ -184,8 +185,10 @@ transient behavior only and is not a full trim characterization.
 A `--bank-style guarded` experiment progressively enlarged higher GF MIMs.
 It repaired those sampled carry transitions, but made a 37.59 kHz gap between
 codes 127 (518.855 kHz) and 128 (481.266 kHz), so it is not the baseline.
-The dashboard keeps binary and guarded runs separate; a full 512-code transient sweep,
-DNL/INL, temperature/corner checks, and charge-state testing remain open.
+The dashboard keeps binary and guarded runs separate. This binary-bank result
+motivated the balanced GF bank below. Full nominal transient sweeps and
+sampled corner searches were started later; DNL/INL and charge-state testing
+remain open.
 
 A full **small-signal AC bank sweep** at a fixed mid-supply bias found
 127 reversed effective-capacitance steps out of 511 on GF's binary bank.
