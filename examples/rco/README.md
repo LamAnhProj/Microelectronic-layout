@@ -334,8 +334,9 @@ empty). The RCO dashboard now launches the GF placement with the installed
 `gf180mcu_klayoutapi` library loaded for that session. Its native KLayout
 Python runtime registered NMOS, PMOS, MIM, and poly resistor PCells in a
 headless check. A scratch-layout probe generated true editable NMOS and MIM
-variants (`is_pcell_variant() == true`) with nonempty geometry. Press `I` in
-an edit-mode **scratch layout** to explore those
+variants (`is_pcell_variant() == true`) with nonempty geometry. In the GF
+placement KLayout window, press `⌘N` for a new **scratch layout**, then `I`
+and choose the GF library to place one of those
 new editable instances. This does not turn the Magic-exported RCO GDS into
 parametric cells, nor substitute the GF KLayout generator for its validated
 Magic device geometry. The SKY generator asks for `gdsfactory`, which is not
