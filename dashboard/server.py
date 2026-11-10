@@ -360,6 +360,7 @@ def rco_full_trim_data(process: str, bank_style: str) -> dict | None:
                 if (sample.get("code") != item["code"] or sample.get("process") != process or
                         sample.get("bank_style") != bank_style or sample.get("status") != "simulated" or
                         sample.get("host") != {"system": "Darwin", "arch": "arm64"} or
+                        sample.get("pdk_pin") != "c6d73a35f524070e85faff4a6a9eef49553ebc2b" or
                         sample.get("netlist_sha256") != digest(path / "rco.spice") or
                         sample.get("waveform_sha256") != digest(path / "waveform.dat")):
                     raise ValueError("Transient evidence mismatch")
@@ -486,11 +487,18 @@ def open_rco_placement(process: str) -> dict:
     lyp = PDK_ROOT / pdk / "libs.tech" / "klayout" / "tech" / lyp_name
     if not lyp.is_file():
         raise ValueError("PDK layer display file is missing")
-    handle = subprocess.Popen([executable, "-e", "-l", str(lyp), placement["layout"],
-                               "-m", placement["markers"]], cwd=ROOT,
+    command = [executable, "-e"]
+    if process == "gf180":
+        loader = ROOT / "examples" / "rco" / "klayout_gf_pcells.py"
+        if not loader.is_file():
+            raise ValueError("GF180 KLayout PCell loader is missing")
+        command += ["-rm", str(loader)]
+    command += ["-l", str(lyp), placement["layout"], "-m", placement["markers"]]
+    handle = subprocess.Popen(command, cwd=ROOT,
                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                               stderr=subprocess.DEVNULL, start_new_session=True)
     return {"pid": handle.pid, "layout": placement["layout"],
+            "pcell_library": "gf180mcu_klayoutapi" if process == "gf180" else None,
             "scope": placement["scope"]}
 
 

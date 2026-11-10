@@ -280,9 +280,12 @@ In Chip Lab, select **Circuit library → Nine-bit RCO**. Toggle RC0, RC1,
 RC2, and CLK_OUT on the voltage plot. The new plot beneath it shows current
 drawn from the core supply, positive when the source delivers current. Move
 over either plot to read time, four voltages, local RC0 slope, approximate
-half-supply reference, and current. Click twice to measure a time interval,
+half-supply reference (the yellow line is not a measured MOS trip point), and
+current. Click twice to measure a time interval,
 RC0 voltage change, mean current, and supply energy `∫VDD I(t)dt` from the
-displayed samples. Supply current includes all core devices; it is not one
+displayed samples. The range form also measures how long a selected voltage
+or current stayed inside a band during a chosen time window. Supply current
+includes all core devices; it is not one
 capacitor's current. The saved PDK simulations on the native arm64 Mac are
 schematic-level, with ideal wiring, not post-layout measurements.
 
@@ -297,6 +300,8 @@ steps before a post-layout 512 kHz claim.
 
 The placement was generated with **Magic** PCells. GDS preserves the drawn
 polygons and cell hierarchy, but not Magic's PCell generator and parameters.
+KLayout can store its own PCell context in a GDS it writes; this particular
+Magic export contains no such KLayout context.
 Native KLayout readback found 367 SKY or 319 GF top-level instances, yet all
 11 SKY or 17 GF imported cells return `is_pcell_variant() == false`. The GDS
 is therefore hierarchical but static in KLayout. Selecting a shape cannot
@@ -305,22 +310,25 @@ inspector shows the original device name, width/length parameters, and
 schematic-intended terminals from the hashed generation manifest.
 
 The installed open PDKs include *separate* KLayout PCell generator macros.
-They are not currently loaded into the Mac's KLayout profile
-(`~/.klayout/pymacros` is empty). The SKY generator asks for `gdsfactory`,
-which is not installed. Loading those libraries would allow **new** editable
-KLayout PCell instances in a KLayout layout; it would not make this
-Magic-generated GDS parametric. The GF KLayout API generator is present, but
-we have not substituted its output for the Magic PCells validated above.
+The Mac's global KLayout profile has no PDK macros (`~/.klayout/pymacros` is
+empty). The RCO dashboard now launches the GF placement with the installed
+`gf180mcu_klayoutapi` library loaded for that session. Its native KLayout
+Python runtime registered NMOS, PMOS, MIM, and poly resistor PCells in a
+headless check. Press `I` in an edit-mode **scratch layout** to explore those
+new editable instances. This does not turn the Magic-exported RCO GDS into
+parametric cells, nor substitute the GF KLayout generator for its validated
+Magic device geometry. The SKY generator asks for `gdsfactory`, which is not
+installed, so its RCO placement remains a static-cell inspection for now.
 
 KLayout's default field keys on this Mac profile have no custom overrides:
-`F2` fits the layout; `C` and `L` show Cells and Layers; `-`/`+` change visible
+`F2` (or `Fn+F2` on a Mac keyboard using media keys) fits the layout; `C` and `L` show Cells and Layers; `-`/`+` change visible
 hierarchy; `S` selects; `Q` opens properties; `D` descends and `A` ascends;
 `R` measures; `I` starts instance placement in edit mode; `Esc` cancels.
 The dashboard's KLayout button launches edit mode (`-e`). First fit with
 `F2`, show Cells with `C`, reduce hierarchy with `-`, select a device box,
 then press `Q` or `D`. This teaches the cell hierarchy without implying
-those static device cells have editable parameters. KLayout's File → Setup →
-Application → Customize Menu lets you inspect or change shortcuts.
+those static device cells have editable parameters. On this Mac, KLayout →
+Preferences → Application → Customize Menu lets you inspect or change shortcuts.
 To change a device width in the current flow, edit the circuit source and
 regenerate its Magic placement, then rerun DRC. Changing a static polygon in
 KLayout would diverge from the schematic and invalidate the recorded hashes.
