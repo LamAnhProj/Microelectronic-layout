@@ -186,7 +186,9 @@ def build_netlist(process: str, code: int, main: bool = True,
         f".meas tran vlow MIN v(clk) FROM={stop_us/2:.3f}u TO={stop_us:.3f}u",
         f".meas tran idd_avg AVG i(VDD) FROM={stop_us/2:.3f}u TO={stop_us:.3f}u",
         ".control", "run", "set wr_singlescale", "set wr_vecnames",
-        "wrdata waveform.dat v(n0) v(n1) v(n2) v(clk)", "quit", ".endc", ".end",
+        "let idd_draw = -i(VDD)",
+        "wrdata waveform.dat v(n0) v(n1) v(n2) v(clk) idd_draw",
+        "quit", ".endc", ".end",
     ]
     return "\n".join(lines) + "\n"
 
@@ -244,7 +246,7 @@ def late_cycle_metrics(waveform: Path, supply: float, start_us: float) -> dict:
     threshold = supply / 2
     for line in waveform.read_text().splitlines()[1:]:
         parts = line.split()
-        if len(parts) != 5:
+        if len(parts) not in (5, 6):
             continue
         now = (float(parts[0]), float(parts[4]))
         if previous and now[0] >= start_us * 1e-6:

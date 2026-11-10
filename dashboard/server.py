@@ -175,6 +175,8 @@ def rco_data(process: str, selected_run: str | None = None) -> dict:
                          (process == "sky130" and
                           "sky130_fd_pr__res_xhigh_po_0p35" in netlist.read_text()))):
                     passive_kind = "pdk_legacy"
+                with waveform.open() as stream:
+                    has_current_trace = "idd_draw" in stream.readline()
                 runs.append({"id": path.name, "code": int(report["code"]),
                              "main": bool(report["main"]),
                              "passives": passive_kind,
@@ -197,6 +199,7 @@ def rco_data(process: str, selected_run: str | None = None) -> dict:
                              "model_tree_sha256": report["model_tree_sha256"],
                              "netlist_sha256": report["netlist_sha256"],
                              "waveform_sha256": report.get("waveform_sha256"),
+                             "has_current_trace": has_current_trace,
                              "source_sha256": report["source_sha256"],
                              "pdk_pin": report["pdk_pin"],
                              "ngspice_version": report["ngspice_version"].splitlines()[1].strip(),
@@ -220,14 +223,16 @@ def rco_data(process: str, selected_run: str | None = None) -> dict:
             candidates = [item for item in runs if item["main"] and item["passives"] == "pdk"]
         if not candidates:
             candidates = [item for item in runs if item["main"]]
-        selected = min(candidates or runs,
-                       key=lambda item: (abs(item["frequency_error_pct"]),
+        near = [item for item in candidates if abs(item["frequency_error_pct"]) <= 0.3]
+        selected = min(near or candidates or runs,
+                       key=lambda item: (not item["has_current_trace"],
+                                         abs(item["frequency_error_pct"]),
                                          item["schematic"] != "xschem"))
     path = folder / selected["id"]
     rows = []
     for line in (path / "waveform.dat").read_text().splitlines()[1:]:
         parts = line.split()
-        if len(parts) != 5:
+        if len(parts) not in (5, 6):
             continue
         row = [float(value) for value in parts]
         if all(math.isfinite(value) for value in row):
@@ -241,6 +246,9 @@ def rco_data(process: str, selected_run: str | None = None) -> dict:
                for row in rows[::stride]]
     return {"process": process, "runs": runs, "selected": selected,
             "passive_probe": rco_passive_probe_data(process),
+            "placements": {choice: rco_placement_data(choice) for choice in PROCESSES},
+            "corner_trim": rco_corner_data(process),
+            "full_trim": rco_full_trim_data(process, selected["bank_style"]),
             "bank_ac": rco_bank_ac_data(process, selected["bank_style"]),
             "samples": samples, "netlist": (path / "rco.spice").read_text(),
             "run_path": str(path),
@@ -251,8 +259,9 @@ def rco_data(process: str, selected_run: str | None = None) -> dict:
                       "and " + ("PDK resistor/MIM capacitor" if selected["passives"] == "pdk"
                                 else "retired passive choice" if selected["passives"] == "pdk_legacy"
                                 else "ideal resistor/capacitor") + " models. The 1 GΩ bleed "
-                      "resistors and 1 pF output load are testbench elements. No full RCO layout "
-                      "or its DRC, LVS, PEX, corner sweep, or silicon measurement is recorded." +
+                      "resistors and 1 pF output load are testbench elements. The separate "
+                      "unrouted placement has DRC results; no connected RCO layout, LVS, PEX, "
+                      "or silicon measurement is recorded." +
                       (" This retired passive choice did not pass the current physical-device audit."
                        if selected["passives"] == "pdk_legacy" else ""))}
 
@@ -325,6 +334,164 @@ def rco_bank_ac_data(process: str, bank_style: str) -> dict | None:
         except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
             continue
     return None
+
+
+def rco_full_trim_data(process: str, bank_style: str) -> dict | None:
+    """Verify all 512 native transient reports before displaying a full sweep."""
+    folder = RUNS / "rco" / "sweeps"
+    if not folder.is_dir():
+        return None
+    candidates = sorted(folder.glob("*/report.json"),
+                        key=lambda path: path.stat().st_mtime, reverse=True)
+    for candidate in candidates:
+        try:
+            report = json.loads(candidate.read_text())
+            if (report.get("status") != "measured" or report.get("process") != process or
+                    report.get("bank_style") != bank_style or
+                    report.get("first_code") != 0 or report.get("last_code") != 511 or
+                    report.get("failures") or len(report["points"]) != 512 or
+                    [item["code"] for item in report["points"]] != list(range(512))):
+                continue
+            for item in report["points"]:
+                path = RUNS / "rco" / item["run_id"]
+                if not UUID.fullmatch(item["run_id"]) or digest(path / "report.json") != item["report_sha256"]:
+                    raise ValueError("Transient report mismatch")
+                sample = json.loads((path / "report.json").read_text())
+                if (sample.get("code") != item["code"] or sample.get("process") != process or
+                        sample.get("bank_style") != bank_style or sample.get("status") != "simulated" or
+                        sample.get("host") != {"system": "Darwin", "arch": "arm64"} or
+                        sample.get("netlist_sha256") != digest(path / "rco.spice") or
+                        sample.get("waveform_sha256") != digest(path / "waveform.dat")):
+                    raise ValueError("Transient evidence mismatch")
+            return {"process": process, "bank_style": bank_style,
+                    "points": [[item["code"], item["frequency_hz"]]
+                               for item in report["points"]],
+                    "reversed_steps": report["reversed_steps"],
+                    "best": report["best"], "scope": report["scope"],
+                    "report": str(candidate)}
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            continue
+    return None
+
+
+def rco_corner_data(process: str) -> dict | None:
+    """Expose only complete Mac corner searches with intact per-code evidence."""
+    folder = RUNS / "rco" / "corner_trim" / process
+    if not folder.is_dir():
+        return None
+    for candidate in sorted(folder.glob("*/report.json"),
+                            key=lambda path: path.stat().st_mtime, reverse=True):
+        try:
+            report = json.loads(candidate.read_text())
+            if (report.get("status") != "measured" or report.get("process") != process or
+                    report.get("host") != {"system": "Darwin", "arch": "arm64"} or
+                    report.get("pdk_pin") != "c6d73a35f524070e85faff4a6a9eef49553ebc2b"):
+                continue
+            scenarios = {}
+            for name in ("fast_cold_high_v", "slow_hot_low_v"):
+                data = report["scenarios"][name]
+                points = []
+                for row in data["sampled"]:
+                    path = candidate.parent / name / f"code_{int(row['code']):03d}"
+                    if (row["host"] != report["host"] or row["pdk_pin"] != report["pdk_pin"] or
+                            row["netlist_sha256"] != digest(path / "rco.spice") or
+                            row["waveform_sha256"] != digest(path / "waveform.dat") or
+                            row["log_sha256"] != digest(path / "ngspice.log")):
+                        raise ValueError("Corner evidence hash mismatch")
+                    points.append({"code": row["code"], "frequency_hz": row["frequency_hz"],
+                                   "error_pct": row["frequency_error_pct"]})
+                best = data["best_sampled"]
+                scenarios[name] = {"model_corner": best["model_corner"],
+                                   "temperature_c": best["temperature_c"],
+                                   "supply_v": best["supply_v"],
+                                   "best_code": best["code"],
+                                   "best_frequency_hz": best["frequency_hz"],
+                                   "best_error_pct": best["frequency_error_pct"],
+                                   "endpoint_bracketed": data["endpoint_bracketed"],
+                                   "sampled": points}
+            return {"process": process, "scenarios": scenarios,
+                    "scope": report["scope"], "report": str(candidate)}
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+    return None
+
+
+def rco_placement_data(process: str) -> dict | None:
+    """Read a hashed, DRC-clear *unrouted* PDK placement."""
+    folder = RUNS / "rco" / "placement" / process
+    if not folder.is_dir():
+        return None
+    reports = sorted((path / "report.json" for path in folder.iterdir()
+                      if path.is_dir() and UUID.fullmatch(path.name)),
+                     key=lambda path: path.stat().st_mtime if path.is_file() else 0,
+                     reverse=True)
+    for report_file in reports:
+        if not report_file.is_file():
+            continue
+        try:
+            report = json.loads(report_file.read_text())
+            manifest_file = report_file.parent / "placement.json"
+            manifest = json.loads(manifest_file.read_text())
+            gds = report_file.parent / "rco_placement.gds"
+            marker = report_file.parent / ("klayout_drc.xml" if process == "sky130"
+                                           else "full.lyrdb")
+            source = report_file.parent / "placement.tcl"
+            expected = 367 if process == "sky130" else 319
+            if (report.get("status") != "placement_drc_clear" or
+                    report.get("process") != process or report.get("pdk_pin") !=
+                    "c6d73a35f524070e85faff4a6a9eef49553ebc2b" or
+                    report.get("host") != {"system": "Darwin", "arch": "arm64"} or
+                    report.get("magic_drc_errors") != 0 or
+                    report.get("klayout_drc_items") != 0 or
+                    report.get("gds_instances") != expected or
+                    len(manifest["instances"]) != expected or
+                    report.get("placement_manifest_sha256") != digest(manifest_file) or
+                    report.get("placement_tcl_sha256") != digest(source) or
+                    report.get("gds_sha256") != digest(gds) or
+                    report.get("marker_sha256") != digest(marker)):
+                continue
+            net_spans = {}
+            for net in ("n0", "n1", "n2", "d0", "d1", "d2"):
+                origins = [item["origin_um"] for item in manifest["instances"]
+                           if net in item["nets_from_schematic"]]
+                if origins:
+                    xs, ys = zip(*origins)
+                    net_spans[net] = {"instances": len(origins),
+                                      "width_um": max(xs) - min(xs),
+                                      "height_um": max(ys) - min(ys)}
+            return {"process": process, "bank_style": report["bank_style"],
+                    "status": report["status"], "scope": report["scope"],
+                    "counts": report["counts"], "instances": manifest["instances"],
+                    "net_spans": net_spans,
+                    "bbox_um": report["gds_bbox_um"], "gds_sha256": report["gds_sha256"],
+                    "magic_drc_errors": 0, "klayout_drc_items": 0,
+                    "layout": str(gds), "markers": str(marker),
+                    "report": str(report_file)}
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            continue
+    return None
+
+
+def open_rco_placement(process: str) -> dict:
+    if process not in PROCESSES:
+        raise ValueError("Unknown process")
+    placement = rco_placement_data(process)
+    if placement is None:
+        raise ValueError("No validated RCO placement is available")
+    executable = shutil.which("klayout")
+    if not executable:
+        raise ValueError("Native KLayout is unavailable")
+    pdk = PROCESSES[process]["pdk"]
+    lyp_name = "sky130A.lyp" if process == "sky130" else "gf180mcu.lyp"
+    lyp = PDK_ROOT / pdk / "libs.tech" / "klayout" / "tech" / lyp_name
+    if not lyp.is_file():
+        raise ValueError("PDK layer display file is missing")
+    handle = subprocess.Popen([executable, "-e", "-l", str(lyp), placement["layout"],
+                               "-m", placement["markers"]], cwd=ROOT,
+                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, start_new_session=True)
+    return {"pid": handle.pid, "layout": placement["layout"],
+            "scope": placement["scope"]}
 
 
 def open_rco_passive_probe(process: str) -> dict:
@@ -1297,6 +1464,8 @@ class Handler(BaseHTTPRequestHandler):
                                                    payload.get("bank_style", "binary")))
             if self.path == "/api/open-rco-passive-probe":
                 return self.reply(200, open_rco_passive_probe(payload.get("process")))
+            if self.path == "/api/open-rco-placement":
+                return self.reply(200, open_rco_placement(payload.get("process")))
             if self.path == "/api/simulate-schematic":
                 return self.reply(200, simulate_schematic(payload))
             return self.reply(404, {"error": "Unknown action"})

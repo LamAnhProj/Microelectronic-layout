@@ -222,8 +222,8 @@ master switch still disconnects the bank in the updated variant.
 The isolated GF physical probe now contains both 5 × 5 µm and 7 × 7 µm
 MIM PCells plus the poly resistor. Magic extraction recognized both MIM
 dimensions and the resistor; Magic and native KLayout each reported zero
-DRC errors/items. The intermediate widths and full RCO placement,
-routing, LVS, and PEX remain unverified.
+DRC errors/items. The intermediate widths were also instantiated in the
+unrouted RCO placement below; routing, LVS, and PEX remain unverified.
 
 SKY AC spot checks at codes 146 and 147 gave 1346.829 and 1355.673 fF.
 A full SKY AC sweep is deferred: the installed SKY model took about 13–20 s
@@ -231,11 +231,99 @@ per code on this 8 GB Mac, while its two native transient checks already
 confirm the local frequency direction. The 512-code AC sweep would take
 roughly an hour at two concurrent workers.
 
-The full RCO has **no routed GDS, RCO DRC/LVS, or RCO PEX yet**. The inverter's
-previous physical checks and these isolated passive-cell checks cannot be
-used as RCO signoff. The next layout stage must place and connect the 130 MOS
-and 234/186 MIMs, then verify connectivity and extracted behavior before any
-post-layout 512 kHz claim.
+### Unrouted RCO placement and DRC checkpoint
+
+`place.py` instantiates every schematic PDK device as a Magic PCell, exports
+GDS, and records a device-origin manifest. `validate_placement.py` checks
+that exact GDS with worker Magic and native Mac KLayout full PDK decks. The
+latest hashed placement reports are under ignored `runs/rco/placement/`.
+
+| Process | PDK devices | Magic DRC | Native KLayout DRC | GDS extent |
+| --- | ---: | ---: | ---: | ---: |
+| SKY130A binary | 367: 130 MOS, 234 MIM, 3 resistors | 0 errors | 0 items | ~1006 × 1007 µm |
+| GF180MCU D balanced | 319: 130 MOS, 186 MIM, 3 resistors | 0 errors | 0 items | ~1008 × 1008 µm |
+
+The first GF placement exposed 65 Nwell-tap and 65 substrate-tap distance
+violations in the native KLayout deck. Nearby local tap shapes cleared those
+distance rules. The contacts are **not connected to power**. The first SKY
+placement exposed 240 Magic errors and 14 unique KLayout metal spacing
+markers from default MOS gate-contact shapes. Removing top and bottom gate
+contacts from these placement PCells cleared that geometry; legal gate
+contacts must be added during routing. These corrections explain how the
+DRC-clear *placement* was reached, but they do not establish a connected
+functional circuit.
+
+The RC-node instance origins are spread widely: `n0` spans 627 × 795 µm,
+`n1` 515 × 860 µm, and `n2` 627 × 860 µm in both floorplans. These are
+bounding spans of placed **device origins**, not measured wire lengths.
+They identify a layout risk: long routes can add series resistance and
+wire-to-substrate or coupled capacitance, changing delay and trim weights.
+SkyWater's published RCX notes say coupling from nearby routing to precision
+poly resistors is not extracted, so the SKY resistor neighborhood needs a
+keep-out and a separate modeling caveat even after routing.
+The first routed iteration should cluster each resistor, inverter input,
+switches, and its capacitor bank. A second iteration can compare tighter
+placement with the original, using actual extracted R/C and waveforms.
+
+### First-year circuit reading guide
+
+An RC node changes voltage because the capacitor stores charge, `Q = C V`.
+Its current is `I_C = C dV/dt`; the resistor limits the charge rate. For an
+ideal resistor charging a capacitor from zero toward a step at `VDD`, the
+voltage is `VDD(1 − exp(−t/RC))`. The half-supply crossing occurs at
+`t = R C ln(2)`. A 512 kHz three-stage ring needs about
+`1/(6 × 512 kHz) = 325.5 ns` average delay per stage. The formula is a
+starting estimate; MOS trip points, switch resistance, input capacitance,
+and capacitor voltage dependence modify the modeled waveform.
+
+In Chip Lab, select **Circuit library → Nine-bit RCO**. Toggle RC0, RC1,
+RC2, and CLK_OUT on the voltage plot. The new plot beneath it shows current
+drawn from the core supply, positive when the source delivers current. Move
+over either plot to read time, four voltages, local RC0 slope, approximate
+half-supply reference, and current. Click twice to measure a time interval,
+RC0 voltage change, mean current, and supply energy `∫VDD I(t)dt` from the
+displayed samples. Supply current includes all core devices; it is not one
+capacitor's current. The saved PDK simulations on the native arm64 Mac are
+schematic-level, with ideal wiring, not post-layout measurements.
+
+The full RCO has **no routed GDS, electrical RCO LVS, or RCO PEX yet**. Zero
+DRC items apply only to the unrouted placement geometry. The inverter's
+previous physical checks and the isolated passive-cell checks cannot be
+used as RCO signoff. Connecting the devices, verifying power/body ties,
+running DRC and LVS again, and extracting parasitics are the next physical
+steps before a post-layout 512 kHz claim.
+
+### Why KLayout shows polygons instead of editable PCells
+
+The placement was generated with **Magic** PCells. GDS preserves the drawn
+polygons and cell hierarchy, but not Magic's PCell generator and parameters.
+Native KLayout readback found 367 SKY or 319 GF top-level instances, yet all
+11 SKY or 17 GF imported cells return `is_pcell_variant() == false`. The GDS
+is therefore hierarchical but static in KLayout. Selecting a shape cannot
+open a KLayout PCell parameter dialog for it. The dashboard's placement
+inspector shows the original device name, width/length parameters, and
+schematic-intended terminals from the hashed generation manifest.
+
+The installed open PDKs include *separate* KLayout PCell generator macros.
+They are not currently loaded into the Mac's KLayout profile
+(`~/.klayout/pymacros` is empty). The SKY generator asks for `gdsfactory`,
+which is not installed. Loading those libraries would allow **new** editable
+KLayout PCell instances in a KLayout layout; it would not make this
+Magic-generated GDS parametric. The GF KLayout API generator is present, but
+we have not substituted its output for the Magic PCells validated above.
+
+KLayout's default field keys on this Mac profile have no custom overrides:
+`F2` fits the layout; `C` and `L` show Cells and Layers; `-`/`+` change visible
+hierarchy; `S` selects; `Q` opens properties; `D` descends and `A` ascends;
+`R` measures; `I` starts instance placement in edit mode; `Esc` cancels.
+The dashboard's KLayout button launches edit mode (`-e`). First fit with
+`F2`, show Cells with `C`, reduce hierarchy with `-`, select a device box,
+then press `Q` or `D`. This teaches the cell hierarchy without implying
+those static device cells have editable parameters. KLayout's File → Setup →
+Application → Customize Menu lets you inspect or change shortcuts.
+To change a device width in the current flow, edit the circuit source and
+regenerate its Magic placement, then rerun DRC. Changing a static polygon in
+KLayout would diverge from the schematic and invalidate the recorded hashes.
 
 ## Reproduce the current Mac checks
 
@@ -252,6 +340,10 @@ python3 examples/rco/sweep_trim.py gf180 200 225 --workers 2
 python3 examples/rco/analyze_bank.py gf180 --bank-style binary --workers 2
 python3 examples/rco/sweep_trim.py gf180 112 120 --bank-style balanced --workers 2
 python3 examples/rco/analyze_bank.py gf180 --bank-style balanced --workers 2
+python3 -m examples.rco.place sky130
+.venv/bin/python -m examples.rco.validate_placement sky130
+python3 -m examples.rco.place gf180
+.venv/bin/python -m examples.rco.validate_placement gf180
 ```
 
 In Chip Lab, choose **Nine-bit RCO** from the circuit menu, then switch
