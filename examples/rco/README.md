@@ -225,6 +225,25 @@ dimensions and the resistor; Magic and native KLayout each reported zero
 DRC errors/items. The intermediate widths were also instantiated in the
 unrouted RCO placement below; routing, LVS, and PEX remain unverified.
 
+### Sampled process, voltage, and temperature checks
+
+Native Mac ngspice runs searched trim codes at two educational stress
+corners per open PDK. These are schematic simulations with modeled devices
+and ideal wires. Each search sampled 13–14 codes, so it can demonstrate
+target reachability along that path but cannot establish 512-code
+monotonicity or the globally best code.
+
+| PDK and corner | VDD and temperature | Best sampled code | Frequency | Error from 512 kHz |
+| --- | --- | ---: | ---: | ---: |
+| SKY130A fast `ff_ll` | 1.89 V, 0 °C | 175 | 511.804 kHz | −0.038% |
+| SKY130A slow `ss_hh` | 1.71 V, 85 °C | 125 | 511.678 kHz | −0.063% |
+| GF180MCU D fast | 3.465 V, 0 °C | 183 | 512.036 kHz | +0.007% |
+| GF180MCU D slow | 3.135 V, 85 °C | 76 | 513.300 kHz | +0.254% |
+
+The reports are under `runs/rco/corner_trim/` and appear in the Chip Lab
+RCO corner panel. No mismatch, startup distribution, post-layout R/C,
+process qualification, or silicon correlation is implied.
+
 SKY AC spot checks at codes 146 and 147 gave 1346.829 and 1355.673 fF.
 A full SKY AC sweep is deferred: the installed SKY model took about 13–20 s
 per code on this 8 GB Mac, while its two native transient checks already
@@ -314,7 +333,9 @@ The Mac's global KLayout profile has no PDK macros (`~/.klayout/pymacros` is
 empty). The RCO dashboard now launches the GF placement with the installed
 `gf180mcu_klayoutapi` library loaded for that session. Its native KLayout
 Python runtime registered NMOS, PMOS, MIM, and poly resistor PCells in a
-headless check. Press `I` in an edit-mode **scratch layout** to explore those
+headless check. A scratch-layout probe generated true editable NMOS and MIM
+variants (`is_pcell_variant() == true`) with nonempty geometry. Press `I` in
+an edit-mode **scratch layout** to explore those
 new editable instances. This does not turn the Magic-exported RCO GDS into
 parametric cells, nor substitute the GF KLayout generator for its validated
 Magic device geometry. The SKY generator asks for `gdsfactory`, which is not
