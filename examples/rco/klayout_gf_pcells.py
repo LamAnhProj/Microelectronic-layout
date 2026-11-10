@@ -13,7 +13,7 @@ import pya
 
 ROOT = Path(__file__).resolve().parents[2]
 MACROS = ROOT / "pdks" / "volare" / "gf180mcuD" / "libs.tech" / "klayout" / "tech" / "pymacros"
-os.environ.setdefault("GF_PDK_OPTION", "D")
+os.environ["GF_PDK_OPTION"] = "D"
 if str(MACROS) not in sys.path:
     sys.path.insert(0, str(MACROS))
 
