@@ -212,12 +212,13 @@ the series/parallel topology and 1.8 V control interface.
 
 The complete **512-code GF AC bank sweep had zero reversed capacitance
 steps** at 1.65 V DC bias and 512 kHz AC. Its smallest measured binary
-carry margin was 3.392 fF. A native transient sweep of codes **112–120**
-had zero frequency reversals in its eight adjacent pairs. Code **117
-measured 511.490 kHz (−0.100%)** at 25 °C with typical PDK models and
-about **504.45 µW** core-supply power. These are promising electrical
-checks, not proof of monotonic transient behavior across all 512 codes
-or across process, voltage, and temperature. The dashboard labels this
+carry margin was 3.392 fF. The later native Mac **512-code nominal transient
+sweep also measured zero reversed frequency steps, with all 512 codes
+simulated and no failed runs**. Code **117 measured 511.490 kHz (−0.100%)**
+at 25 °C with typical PDK models and about **504.45 µW** core-supply power.
+The transient result establishes modeled nominal code ordering for this
+bank; it does not establish ordering at every process, voltage, and
+temperature corner or after layout extraction. The dashboard labels this
 candidate **Balanced GF experiment**, with a separate editable Xschem source.
 With `MAIN=0`, that Xschem source measured **1.265 MHz**, confirming the
 master switch still disconnects the bank in the updated variant.
