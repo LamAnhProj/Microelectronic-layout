@@ -12,10 +12,15 @@ KLayout Python module, and uses native Mac ngspice for dashboard waveforms when
 available. The Docker worker remains the fallback and runs the full pipeline.
 It does not upload a design, PDK, report, or waveform.
 
-This session's server is already running in the background. If the URL opens,
-there is no need to start a second copy. Its log and PID are in
-`runs/dashboard/server.log` and `runs/dashboard/server.pid`. Stop that instance
-with `kill "$(cat runs/dashboard/server.pid)"`.
+On this Mac, a user LaunchAgent starts the dashboard at login and restarts it
+if it exits. Its configuration is
+`~/Library/LaunchAgents/com.lamanhproj.chiplab.dashboard.plist`, and its log is
+`runs/dashboard/server.log`. Check it with
+`launchctl print gui/$(id -u)/com.lamanhproj.chiplab.dashboard`.
+To stop the background instance, run
+`launchctl bootout gui/$(id -u)/com.lamanhproj.chiplab.dashboard`.
+To start it again, run
+`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.lamanhproj.chiplab.dashboard.plist`.
 
 The **Test circuit** view creates an exploratory inverter netlist and waveform
 under `runs/dashboard/experiments/`. It does not certify DRC, LVS, extraction,
@@ -92,5 +97,5 @@ remote compute remains unfinished.
 
 The server uses Python's standard library and the repository's existing
 `.venv` and Docker setup. A manually started `make dashboard` instance stops
-with Ctrl-C. To use another port, run
+with Ctrl-C; stop the LaunchAgent first to free port 8765. To use another port, run
 `.venv/bin/python dashboard/server.py 8766`.
