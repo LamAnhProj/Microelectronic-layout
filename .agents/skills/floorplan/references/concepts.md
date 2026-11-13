@@ -44,3 +44,32 @@ actual routed wire lengths, DRC/LVS, extracted R/C, and post-layout waveforms.
 `knowledge/lab-book.md`. Its nearly square GDS bounding boxes are from
 unrouted PDK-device placements. A top-level boundary and routed performance
 have not been established.
+
+## FP-002 — Place the critical trim capacitor banks first
+
+**Source:** Engineer teaching and correction, 2026-11-12. The existing
+unrouted placement's square bbox is insufficient. Place capacitor banks
+according to circuit function before arranging less critical components.
+
+**Physical cause:** Wires and switches change the effective resistance and
+capacitance seen by each RC node. `i_C = C dV/dt` links capacitance to slew;
+the first-order crossing delay is `R C ln(2)` for a half-supply threshold.
+Selected branches can have different parasitics, disturbing bit weights and
+the 512 kHz trim. These are predictions until connected-layout PEX and
+transient checks exist.
+
+**Candidates taught by the engineer:** Common-centroid capacitor placement,
+or a fan with the MSB centered at one square edge and successive bits
+spreading from it. These are alternatives to sketch and compare, not a
+selected implementation. The fan direction and detailed unit assignment
+remain open.
+
+**Decision path:** Count actual MIM instances per bit and stage. Estimate
+square or rectangular array dimensions for each separate stage bank. Keep
+the larger base MIM distinguishable from trim units. Sketch both patterns;
+ask the engineer to correct the orientation and grouping. Only then propose
+cell locations and routing. Compare extracted branch R/C, trim-step
+monotonicity, waveform slew, and post-layout frequency before preferring one.
+
+**Current counts and sketches:** See `knowledge/lab-book.md`, FP-002. No
+physical layout change has been authorized for this teaching step.

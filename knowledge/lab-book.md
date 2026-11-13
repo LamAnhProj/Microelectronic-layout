@@ -83,6 +83,71 @@ does not establish the engineer's performance goal.
 be arranged within that shape before routing? Record the engineer's reason,
 then compare a candidate arrangement with this baseline.
 
+## 2026-11-12 — FP-002: Capacitor banks first
+
+**Engineer correction:** The current square-looking placement is poor because
+the function of the circuit matters more than its bounding-box shape. The
+nine-bit trim capacitor banks are critical. Their wiring resistance and
+capacitance affect the RC-node edge slew and stage timing. Assemble the
+capacitor banks first; consider either common-centroid placement or a fan
+arrangement with the MSB at the middle of one square edge and successively
+less significant bits spreading in fan-like regions.
+
+**Terminology:** Edge slew is `dV/dt`; timing skew is a difference between
+arrival times. Both can change with parasitic RC, but the requested physical
+concern here is the RC-node waveform and the trim steps. For a first-order
+single-node estimate, `i_C = C dV/dt` and `t_50 ≈ R C ln(2)`. Distributed
+wire resistance and capacitance require the actual routed network; this
+estimate does not determine the preferred geometry.
+
+**Verified device inventory from the current schematic generator:** Each of
+the three stages has one larger base MIM and the following trim-unit MIM
+counts. This is a count of PDK capacitor instances, not equal physical area.
+
+| PDK | Bit 0 → bit 8 unit counts | Trim units / stage | Base MIM / stage | All MIMs / stage | Three-stage total |
+| --- | --- | ---: | ---: | ---: | ---: |
+| SKY130A binary | 8, 4, 2, 1, 2, 4, 8, 16, 32 | 77 | 1 | 78 | 234 |
+| GF180MCU D balanced | 16, 8, 4, 2, 1, 2, 4, 8, 16 | 61 | 1 | 62 | 186 |
+
+**Agent grid proposal for one trim bank, keeping the base MIM separate:**
+
+| PDK | Near-square grid | Open sites | Rectangular option | Open sites |
+| --- | ---: | ---: | ---: | ---: |
+| SKY130A | 9 rows × 9 columns = 81 | 4 | 8 × 10 = 80 | 3 |
+| GF180MCU D | 8 rows × 8 columns = 64 | 3 | 7 × 9 = 63 | 2 |
+
+Counting all three stages in one array would give 231 SKY or 183 GF trim
+units: a 15 × 16 grid has nine open sites for SKY, while a 14 × 14 grid has
+13 for GF. These are arithmetic packings only. The three banks connect to
+different RC nodes, so one shared array is not a placement decision yet.
+
+The open sites are *planning capacity*, not approved dummy cells or empty
+fabrication sites. If a base MIM is counted as one site, 9 × 9 leaves three
+sites on SKY and 8 × 8 leaves two on GF; this is geometrically misleading
+because the base MIM is much larger than a trim unit. SKY trim units use a
+4.5 µm plate width. GF balanced trim units vary from 5 to 7 µm; both base
+plates are about 15.6–15.7 µm. Legal cell pitch, routing channels, edge
+dummies, and the true bank outline remain to be determined from the PDKs.
+
+**Rough pattern only; not unit-cell placement:**
+
+```text
+COMMON CENTROID                 EDGE-ANCHORED FAN (assumed inward spread)
+┌─────────────────────┐         ┌─────────────────────────┐
+│ mirrored bit groups │         │ outer, lower bits       │
+│    ↘    ↓    ↙      │         │   C6   C5   C4   C6    │
+│       center        │         │    C7         C7       │
+│    ↗    ↑    ↖      │         │      broad C8 zone      │
+│ mirrored bit groups │         │      broad C8 zone      │
+└─────────────────────┘         └────center of edge───────┘
+```
+
+In either sketch, `C8` denotes a **region containing many unit capacitors**:
+32 in SKY and 16 in GF, not one device. The exact bit tiling and routing are
+not drawn. The fan orientation, switch and RC-node locations, and whether the
+base MIM sits inside or beside the trim array need the engineer's decision.
+No GDS, DRC, LVS, or PEX was generated for these proposals.
+
 ## Entry format for each taught concept
 
 Record the engineer's statement in ordinary language first. Then add:
