@@ -533,6 +533,61 @@ must later be translated into process-specific GDS, connected to switches,
 have dummies actually tied to ground, and pass DRC, LVS, PEX, and transient
 trim checks before comparing performance.
 
+## FP-012 · Route and test one four-unit capacitor branch
+
+The engineer requested a small placed-and-routed check before optimizing the
+whole bank. SKY130A trim bit 1 and GF180MCU D trim bit 2 each use **four MIM
+units in series**. We built one isolated, vertical, four-PCell chain per PDK
+on a 14 µm site pitch. Each bottom plate connects to the next top plate through
+M5; `IN` and `GND` terminate the series chain. The layout has no switch,
+dummy ring, resistor, or other oscillator block. These new GDS snapshots do
+not replace any of the five saved floorplan proposals.
+
+**Model and prediction:** For four equal, uncoupled cells, `Ceq = Cunit / 4`.
+Routing adds coupling and fringe capacitance, so the measured input
+capacitance can be higher. With an intentionally simple 470 kΩ step-drive
+bench, the first-order half-supply delay is `t50 ≈ Rdrive × Ceq × ln(2)`.
+An extracted capacitance increase should raise delay. The bench isolates the
+bank's electrical loading; its nanosecond delay is **not** oscillator stage
+delay or a 512 kHz frequency result.
+
+| Mac check | SKY130A, bit 1 | GF180MCU D, bit 2 |
+| --- | ---: | ---: |
+| Four PDK MIM PCells, routed GDS | 4 | 4 |
+| Magic full DRC / native KLayout full DRC | 0 / 0 | 0 / 0 |
+| Netgen LVS against four-series reference | Unique match | Unique match |
+| Schematic AC C at 512 kHz | 10.863 fF | 19.340 fF |
+| Cap PEX AC C / step delay | 12.496 fF / 4.071 ns | 20.436 fF / 6.657 ns |
+| Flattened R-C extraction AC C / step delay | 12.289 fF / 4.003 ns | 20.363 fF / 6.634 ns |
+| Resolved extracted resistors / coupling caps | 0 / 7 | 1 / 11 |
+
+The schematic delays were 3.539 ns SKY and 6.300 ns GF. Both PEX benches
+rose as predicted, by 0.532 ns and 0.357 ns. The cap-only and flattened R-C
+extractions differ slightly in topology and parasitic accounting; their small
+delay difference is not an optimization result. The SKY extraction resolved
+**zero wire resistors**, so it does not yet measure the distributed-wire-R
+question. GF resolved one, about 0.56 Ω on the ground side; this is tiny
+compared with the 470 kΩ drive and cannot establish the full bank's timing.
+
+**Correction during construction:** The first PCell-origin assumption made
+plate placement and M5 terminal overlap wrong; early private runs found DRC
+errors and invalid connectivity. We measured the actual PCell plate extents,
+compensated its origin, moved the M5 rail outside the bottom-plate via, and
+reran both independent DRC engines plus LVS. Only the final passing snapshots
+are shown in the dashboard. The exact layout script, SPICE decks, GDS,
+extractions, logs, waveforms, hashes, and reports are in the ignored run
+folders: SKY `4c6796e1-614a-446f-b02a-f713a56406f0` and GF
+`c0f4b133-ff92-4352-899b-269b7e90c866` under `runs/rco/four_mim/`.
+The scripts ran on the actual Darwin arm64 Mac; Magic and Netgen used its
+local Docker worker, while KLayout and ngspice ran natively on macOS. The
+open PDKs are learning kits, not foundry signoff qualification.
+
+**Next decision:** Add the associated transmission gate and grounded dummy
+boundary, then extract a longer bank route with resolved resistance and
+compare candidate placements under the same electrical bench. Only after
+hierarchical integration can a trim-code transient sweep test oscillator
+frequency, phase, and process-corner behavior.
+
 ## Entry format for each taught concept
 
 Record the engineer's statement in ordinary language first. Then add:

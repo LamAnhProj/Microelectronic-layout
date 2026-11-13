@@ -168,3 +168,65 @@ fetch('/floorplan-data.json').then(response=>{if(!response.ok)throw Error(`HTTP 
   for(const item of revisions){const option=document.createElement('option');option.value=item.id;option.textContent=item.title;select.append(option);}
   selectEditorRevision(revisions[3].id,false);
 }).catch(error=>status(`Could not load editable floorplan sites: ${error.message}`));
+
+const maskColors={m4:'#5583b8',mim:'#62dfc5',m5:'#f2bd61'};
+function drawRouted(card,data,visible){
+  const canvas=card.querySelector('canvas'),ctx=canvas.getContext('2d');
+  const width=Math.max(320,canvas.clientWidth),height=300,ratio=window.devicePixelRatio||1;
+  canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);ctx.scale(ratio,ratio);
+  ctx.clearRect(0,0,width,height);
+  const [xmin,ymin,xmax,ymax]=data.geometry.bbox_um,pad=26;
+  const scale=Math.min((width-2*pad)/(xmax-xmin),(height-2*pad)/(ymax-ymin));
+  const left=(width-(xmax-xmin)*scale)/2,bottom=(height-(ymax-ymin)*scale)/2;
+  const x=value=>left+(value-xmin)*scale,y=value=>height-bottom-(value-ymin)*scale;
+  for(const name of ['m4','mim','m5']){
+    if(!visible.has(name))continue;
+    ctx.fillStyle=maskColors[name];ctx.globalAlpha=name==='m4'?.42:.72;
+    for(const polygon of data.geometry.layers[name]){
+      if(!polygon.length)continue;
+      ctx.beginPath();ctx.moveTo(x(polygon[0][0]),y(polygon[0][1]));
+      for(const point of polygon.slice(1))ctx.lineTo(x(point[0]),y(point[1]));
+      ctx.closePath();ctx.fill();
+    }
+  }
+  ctx.globalAlpha=1;ctx.font='12px system-ui';ctx.fillStyle='#f5f8ff';
+  for(let index=0;index<4;index++)ctx.fillText(`C${index}`,x(42),y(50+14*index)+4);
+  ctx.fillText('IN',x(40),y(50)-7);ctx.fillText('GND',x(56),y(92)-7);
+}
+function renderRouted(process,data){
+  const card=get(`routed-${process}`),checks=data.checks;
+  card.querySelector('.routed-status').textContent=`Mac run · Magic DRC ${checks.magic_drc_errors} · KLayout DRC ${checks.klayout_drc_items} · LVS unique match · RCX ${checks.rcx.extracted_resistors} resistor${checks.rcx.extracted_resistors===1?'':'s'}`;
+  const toggles=card.querySelector('.layer-toggles'),visible=new Set(['m4','mim','m5']);
+  for(const [name,label] of [['m4','M4 bottom'],['mim','MIM top'],['m5','M5 route']]){
+    const wrapper=document.createElement('label'),checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=true;
+    checkbox.addEventListener('change',()=>{checkbox.checked?visible.add(name):visible.delete(name);drawRouted(card,data,visible);});
+    const swatch=document.createElement('i');swatch.style.setProperty('--layer-color',maskColors[name]);
+    wrapper.append(checkbox,swatch,document.createTextNode(label));toggles.append(wrapper);
+  }
+  const metrics=card.querySelector('.routed-metrics'),table=document.createElement('table');
+  table.innerHTML='<thead><tr><th>Testbench</th><th>AC C at 512 kHz</th><th>Half-supply delay</th></tr></thead><tbody></tbody>';
+  for(const [key,label] of [['schematic','Schematic'],['capacitance_pex','Cap PEX'],['distributed_rcx','R-C extraction']]){
+    const result=data.results[key],row=document.createElement('tr');
+    for(const text of [label,`${(result.ac.capacitance_f*1e15).toFixed(3)} fF`,`${(result.transient.delay_s*1e9).toFixed(3)} ns`]){
+      const cell=document.createElement('td');cell.textContent=text;row.append(cell);
+    }
+    table.tBodies[0].append(row);
+  }
+  metrics.append(table);
+  card.querySelector('.routed-path').textContent=`Saved run ${data.run_id} · ${data.gds}`;
+  card.querySelector('.open-routed').addEventListener('click',async()=>{
+    try{
+      const overview=await fetch('/api/overview').then(response=>response.json());
+      const response=await fetch('/api/open-rco-four-mim',{method:'POST',headers:{'Content-Type':'application/json','X-Lab-Token':overview.token},body:JSON.stringify({process})});
+      const opened=await response.json();if(!response.ok)throw Error(opened.error||`HTTP ${response.status}`);
+      card.querySelector('.routed-path').textContent=`Opened in native KLayout: ${opened.layout} · DRC markers: ${opened.markers}`;
+    }catch(error){card.querySelector('.routed-path').textContent=`Could not open KLayout: ${error.message}`;}
+  });
+  drawRouted(card,data,visible);
+  window.addEventListener('resize',()=>drawRouted(card,data,visible));
+}
+for(const process of ['sky130','gf180']){
+  fetch(`/api/rco-four-mim?process=${process}`).then(async response=>{
+    const result=await response.json();if(!response.ok)throw Error(result.error||`HTTP ${response.status}`);return result;
+  }).then(result=>renderRouted(process,result)).catch(error=>{get(`routed-${process}`).querySelector('.routed-status').textContent=`Evidence unavailable: ${error.message}`;});
+}

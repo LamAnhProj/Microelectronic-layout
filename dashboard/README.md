@@ -91,6 +91,16 @@ fixed. Drafts are saved in browser local storage per panel, with undo, reset,
 and a JSON download. The editor does not change GDS or verify electrical
 connectivity, dummy ties, DRC, LVS, PEX, or post-layout frequency.
 
+The same page has a **Four capacitors in series** checkpoint beneath the
+placement sandbox. It reads the latest passing native-Mac coupon report for
+each PDK, verifies the saved GDS hash and DRC/LVS status, and draws M4, MIM,
+and M5 polygons directly from that GDS with layer toggles. It compares
+schematic, capacitance PEX, and R-C extraction input capacitance and
+step-drive delay. **Open GDS + DRC in KLayout** launches the saved GDS and
+its marker database. These isolated chains have no bank switch, dummy ring,
+or oscillator frequency result. SKY's small coupon resolved no wire resistor;
+GF's resolved one. The full RCO remains unrouted.
+
 The **DRC / LVS** view now parses KLayout marker coordinates and Netgen
 comparisons, including GF180's deliberate failing controls. **PEX** displays
 the capacitor network, explicit wire resistors, and full netlist for RC runs.

@@ -503,6 +503,81 @@ def open_rco_placement(process: str) -> dict:
             "scope": placement["scope"]}
 
 
+def rco_four_mim_data(process: str) -> dict:
+    """Read the latest passed, hashed four-unit routed coupon for one PDK."""
+    if process not in PROCESSES:
+        raise ValueError("Unknown process")
+    import klayout.db as db
+
+    base = RUNS / "rco" / "four_mim" / process
+    reports = sorted(base.glob("*/report.json"), key=lambda item: item.stat().st_mtime,
+                     reverse=True)
+    for report_file in reports:
+        if not UUID.fullmatch(report_file.parent.name):
+            continue
+        try:
+            report = json.loads(report_file.read_text())
+            folder = report_file.parent
+            gds = folder / "rco_four_mim.gds"
+            marker = folder / ("klayout_drc.xml" if process == "sky130" else "full.lyrdb")
+            if (report.get("status") != "passed" or report.get("process") != process or
+                    report.get("checks", {}).get("magic_drc_errors") != 0 or
+                    report["checks"].get("klayout_drc_items") != 0 or
+                    report["checks"].get("netgen_lvs") != "unique match, four MIM devices" or
+                    not marker.is_file() or not gds.is_file() or
+                    digest(gds) != report["checks"].get("gds_sha256")):
+                continue
+            layout = db.Layout()
+            layout.read(str(gds))
+            top = layout.top_cell()
+            if not top or top.name != "rco_four_mim" or sum(1 for _ in top.each_inst()) != 4:
+                continue
+            keys = ({"m4": "71/20", "m5": "72/20", "mim": "97/44"}
+                    if process == "sky130" else
+                    {"m4": "46/0", "m5": "81/0", "mim": "75/0"})
+            layers = {}
+            for name, key in keys.items():
+                layer = next((i for i in layout.layer_indices()
+                              if layout.get_info(i).to_s() == key), None)
+                polygons = []
+                if layer is not None:
+                    for polygon in db.Region(top.begin_shapes_rec(layer)).each():
+                        polygons.append([[round(point.x * layout.dbu, 3),
+                                          round(point.y * layout.dbu, 3)]
+                                         for point in polygon.each_point_hull()])
+                layers[name] = polygons
+            box = top.bbox()
+            return {"process": process, "bit": report["bit"],
+                    "run_id": folder.name, "status": report["status"],
+                    "scope": report["scope"], "checks": report["checks"],
+                    "results": report["results"], "gds": str(gds),
+                    "report": str(report_file), "marker": str(marker),
+                    "geometry": {"bbox_um": [round(value * layout.dbu, 3) for value in
+                                             (box.left, box.bottom, box.right, box.top)],
+                                 "layers": layers}}
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            continue
+    raise ValueError("No passed four-MIM routed coupon is available")
+
+
+def open_rco_four_mim(process: str) -> dict:
+    data = rco_four_mim_data(process)
+    executable = shutil.which("klayout")
+    if not executable:
+        raise ValueError("Native KLayout is unavailable")
+    pdk = PROCESSES[process]["pdk"]
+    lyp = PDK_ROOT / pdk / "libs.tech" / "klayout" / "tech" / (
+        "sky130A.lyp" if process == "sky130" else "gf180mcu.lyp")
+    if not lyp.is_file():
+        raise ValueError("PDK layer display file is missing")
+    handle = subprocess.Popen([executable, "-e", "-l", str(lyp), data["gds"],
+                               "-m", data["marker"]], cwd=ROOT,
+                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, start_new_session=True)
+    return {"pid": handle.pid, "layout": data["gds"],
+            "markers": data["marker"], "scope": data["scope"]}
+
+
 def open_rco_passive_probe(process: str) -> dict:
     if process not in PROCESSES:
         raise ValueError("Unknown process")
@@ -1423,6 +1498,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, report_data(q["process"], q["run"]))
             if parsed.path == "/api/rco":
                 return self.reply(200, rco_data(q["process"], q.get("run")))
+            if parsed.path == "/api/rco-four-mim":
+                return self.reply(200, rco_four_mim_data(q["process"]))
             if parsed.path == "/api/artifact":
                 return self.reply(200, {"name": q["name"], "text":
                     artifact_text(q["process"], q["run"], q["name"])})
@@ -1503,6 +1580,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, open_rco_passive_probe(payload.get("process")))
             if self.path == "/api/open-rco-placement":
                 return self.reply(200, open_rco_placement(payload.get("process")))
+            if self.path == "/api/open-rco-four-mim":
+                return self.reply(200, open_rco_four_mim(payload.get("process")))
             if self.path == "/api/simulate-schematic":
                 return self.reply(200, simulate_schematic(payload))
             return self.reply(404, {"error": "Unknown action"})

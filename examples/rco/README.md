@@ -313,11 +313,33 @@ capacitor's current. The saved PDK simulations on the native arm64 Mac are
 schematic-level, with ideal wiring, not post-layout measurements.
 
 The full RCO has **no routed GDS, electrical RCO LVS, or RCO PEX yet**. Zero
-DRC items apply only to the unrouted placement geometry. The inverter's
-previous physical checks and the isolated passive-cell checks cannot be
-used as RCO signoff. Connecting the devices, verifying power/body ties,
-running DRC and LVS again, and extracting parasitics are the next physical
-steps before a post-layout 512 kHz claim.
+DRC items for its full placement apply only to unrouted geometry. The inverter,
+isolated passive, and four-MIM coupon checks cannot be used as RCO signoff.
+Connecting the devices, verifying power/body ties, running DRC and LVS again,
+and extracting parasitics are the next physical steps before a post-layout
+512 kHz claim.
+
+### First routed four-MIM branch
+
+`uv run --frozen --extra layout python -m examples.rco.route_four_mim sky130`
+and the `gf180` form regenerate a separate series-chain GDS and test it on
+the Mac. SKY bit 1 and GF bit 2 each contain four series MIM units. The runner
+records Magic and KLayout DRC, Netgen LVS, Magic capacitance and resistance
+extraction, and native ngspice AC and transient benches. It does not add the
+switch, dummy boundary, or full ring oscillator. The [floorplan comparison](http://127.0.0.1:8765/floorplans/)
+shows both routed GDS snapshots with layer toggles, measured results, and a
+button to open the GDS and zero-item DRC marker database in native KLayout.
+The raw testbench decks, waveforms, logs, extraction files, and hashed report
+are under ignored `runs/rco/four_mim/<process>/<uuid>/`.
+
+At 512 kHz and 25 °C, the schematic-to-cap-PEX input capacitance changed
+from 10.863 to 12.496 fF on SKY and from 19.340 to 20.436 fF on GF. A
+470 kΩ step-drive bench measured 3.539 to 4.071 ns and 6.300 to 6.657 ns
+for the same comparison. This measures isolated branch loading, **not** the
+512 kHz oscillator frequency. The flattened R-C extraction resolved no SKY
+wire resistor and one small GF resistor, so a longer routed-bank experiment
+is needed to study distributed wire resistance. See FP-012 in
+`knowledge/lab-book.md` for the prediction, corrections, and run IDs.
 
 ### Why KLayout shows polygons instead of editable PCells
 
