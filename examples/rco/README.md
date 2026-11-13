@@ -364,18 +364,19 @@ KLayout would diverge from the schematic and invalidate the recorded hashes.
 ### Isolated capacitor-bank comparison
 
 The [bank floorplan SVG](bank-floorplans.svg) shows one stage's edge fan and
-common-centroid proposals side by side for both PDKs. The fan entry row has
-17 sites: a mirrored pair for each even-population bit and one center
-singleton. The upper fan rows have 16 adjacent sites, shifted inward by half
-a pitch on each side; there is no central dummy column. The SKY fan has five
-active rows and the GF fan has four. Only two mirrored pairs at the far-row
-outer edges are internal dummies. A one-site dummy ring surrounds each bank.
-The centroid comparison remains on its regular 17×5 grid, so the GF fan and
-centroid now have different footprints. Compare extracted route lengths and
-area alongside delay, rather than attributing all differences to bit order.
-Those dummy plates are **intended** for ground but are not connected yet.
-The same hierarchical schematic is used for both placements, so schematic
-waveforms are identical by variant.
+common-centroid proposals side by side for both PDKs. Every unit MIM M4
+plate **center** uses the same 14.0 µm column and row grid; there is no
+row staggering. PCell origins are offset by half the measured plate size so
+the different GF unit widths still share those centers. Both banks
+have five rows and 17 columns. The fan's switch-facing row is fully active;
+the common centroid's middle row is fully active. In each bank, four MSB
+cells occupy the center column of the other rows. The SKY active span is
+15 cells wide in those rows; GF is 11 cells wide. Active cells occupy
+contiguous sites without a dummy channel. Dummies fill only the outer
+columns and the one-site perimeter ring. Those plates are **intended** for
+ground but are not connected yet. The common-centroid layout has the same
+average M4 bottom-plate center for every bit group. Both variants use the same hierarchical
+schematic, so schematic waveforms are identical by variant.
 
 At 14.0 µm site pitch, the measured M4 bottom-plate shapes leave at least
 6.01 µm between SKY units and 4.60 µm between the widest GF units. A 0.5 µm

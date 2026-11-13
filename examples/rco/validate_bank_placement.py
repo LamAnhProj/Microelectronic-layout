@@ -15,7 +15,8 @@ import xml.etree.ElementTree as ET
 
 import klayout.db as db
 
-from examples.rco.bank_placement import SIDE_CLEARANCE_UM, WIRE_WIDTH_UM, write
+from examples.rco.bank_placement import (PITCH_UM, SIDE_CLEARANCE_UM,
+                                         WIRE_WIDTH_UM, X0_UM, Y0_UM, write)
 from examples.rco.run import CONFIG, PDK_ROOT, PIN, ROOT, sha256
 
 
@@ -68,11 +69,27 @@ def validate(process: str, variant: str, corridor_probe: bool = False) -> dict:
     gds_instances = sum(1 for _ in top.each_inst())
     if gds_instances != expected:
         raise RuntimeError(f"GDS has {gds_instances} instances; expected {expected}")
+    m4_gds = "71/20" if process == "sky130" else "46/0"
+    layer = next(i for i in layout.layer_indices()
+                 if layout.get_info(i).to_s() == m4_gds)
+    unit_plate_boxes = [shape.bbox().transformed(inst.trans)
+                        for inst in top.each_inst()
+                        if "cap_mim" in inst.cell.name.lower()
+                        for shape in inst.cell.shapes(layer).each()
+                        if shape.bbox().width() * layout.dbu < 12.0]
+    expected_units = manifest["counts"]["cap"] - 1 + manifest["counts"]["dummy_cap"]
+    if len(unit_plate_boxes) != expected_units:
+        raise RuntimeError("MIM unit plate population does not match the manifest")
+    center_errors = []
+    for box in unit_plate_boxes:
+        x, y = box.center().x * layout.dbu, box.center().y * layout.dbu
+        center_errors.extend((abs(x - X0_UM - round((x - X0_UM) / PITCH_UM) * PITCH_UM),
+                              abs(y - Y0_UM - round((y - Y0_UM) / PITCH_UM) * PITCH_UM)))
+    max_center_error = max(center_errors)
+    if max_center_error > 0.01:
+        raise RuntimeError("MIM plate centers are staggered off the uniform grid")
     probe_geometry = None
     if corridor_probe:
-        m4_gds = "71/20" if process == "sky130" else "46/0"
-        layer = next(i for i in layout.layer_indices()
-                     if layout.get_info(i).to_s() == m4_gds)
         wires = [shape.bbox() for shape in top.shapes(layer).each()]
         if len(wires) != 1:
             raise RuntimeError("Corridor probe is missing or on the wrong GDS layer")
@@ -137,6 +154,7 @@ def validate(process: str, variant: str, corridor_probe: bool = False) -> dict:
                               (top.bbox().left, top.bbox().bottom,
                                top.bbox().right, top.bbox().top)],
               "magic_drc_errors": int(counts[0]), "klayout_drc_items": len(items),
+              "mim_grid_max_center_error_um": max_center_error,
               "corridor_probe_geometry": probe_geometry,
               "placement_manifest_sha256": sha256(folder / "placement.json"),
               "placement_tcl_sha256": sha256(source), "gds_sha256": sha256(gds),

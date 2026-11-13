@@ -169,3 +169,31 @@ the applicable PDK spacing still controls physical edge clearance.
 rows; GF has the same entry row plus three upper rows. The centroid remains
 17×5 for comparison. See lab book FP-007 for the geometry and comparison
 caveat. Electrical benefit remains a PEX hypothesis.
+
+## FP-008 — Fill both patterns on one uniform MIM grid
+
+**Source:** Engineer correction, 2026-11-12. Active units must occupy
+adjacent sites in the common-centroid layout too. Do not stagger MIM rows.
+This supersedes the staggered geometry in FP-007.
+
+**Corrected physical logic:** The previous assertion that the center column
+must remain empty above the odd singleton was false. An even-population bit
+can put an even number of its units on the symmetry axis. For this RCO,
+four MSB units fill that column in the other four rows. The remaining MSB
+units can still form left/right mirrored pairs.
+
+**Decision path:** Keep every unit MIM bottom-plate center on the same
+process-legal x/y grid; offset each PCell origin by half its plate dimensions.
+Place the odd singleton on the full row, assign an even number of MSB units
+to central sites in the other rows, then fill mirrored pairs (fan) or
+four-way quartets (centroid). Require each active row's occupied columns
+to be contiguous and verify exact per-bit centroid for the centroid variant.
+Put all leftover core dummies at the outer columns and retain the perimeter
+ring. Physical MIM plates must keep their PDK spacing; site adjacency does
+not mean metal-to-metal contact.
+
+**Current implementation:** Both patterns are 5×17. SKY has one 17-unit
+active row and four 15-unit rows; GF has one 17-unit row and four 11-unit
+rows. The full row is at the switch edge for fan and in the middle for
+centroid. See lab book FP-008 for physical checks and remaining electrical
+work.

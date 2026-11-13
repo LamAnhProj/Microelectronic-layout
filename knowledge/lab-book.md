@@ -368,6 +368,58 @@ SKY and 2.05 µm GF plate clearance. The final fan placement run IDs are
 `runs/rco/bank_placement/`. Ground ties, electrical LVS, and bank PEX
 remain open.
 
+## 2026-11-12 — FP-008: Uniform MIM grid for both bank patterns
+
+**Engineer correction:** Active capacitor bits should occupy adjacent sites
+in the common-centroid layout too. Do not stagger MIM capacitor rows.
+This supersedes the staggered fan geometry in FP-007.
+
+**Correction to the earlier reasoning:** FP-007 claimed the center column
+could not hold active units above the singleton while preserving per-bit
+left/right symmetry. That overlooked the MSB's **even** population. Placing
+four MSB units on the center axis uses an even number of self-mirrored
+positions, leaving its remaining units in mirrored pairs. The singleton
+stays on the full row. This removes the dummy channel without shifting any
+cell off the shared column lattice.
+
+**Uniform-grid construction:** Both variants now use five rows by 17 columns
+at 14.0 µm M4 bottom-plate center pitch. The fan's row 0 is fully active and faces the bit
+switches. The common centroid's row 2 is fully active. The other four rows
+have a centered contiguous active span: columns 1–15 for SKY (15 active per
+row) and columns 3–13 for GF (11 active per row). In each of those rows,
+column 8 holds one MSB unit. The counts are exact:
+`17 + 4×15 = 77` SKY trim MIMs and `17 + 4×11 = 61` GF trim MIMs.
+All remaining core sites are outer-edge dummies; a one-site dummy ring
+surrounds the rectangle. Every active row has no gap between bit sites.
+Each unit PCell origin is offset by half its measured M4 plate dimensions,
+so the different GF unit widths still put their M4 plate centers on the
+same x/y lattice. The actual plates retain their PDK-required separation
+and do not literally touch.
+
+**Common-centroid check:** Each bit remains mirrored left/right. The four
+off-center MSB axis cells are at rows 0, 1, 3, and 4, balanced about row 2.
+The remaining noncentral units are placed in left/right and top/bottom
+quartets; two-unit groups sit as symmetric pairs on row 2. The generator
+asserts each bit's mean row is 2 and mean column is 8. The GDS verifier
+checks every unit M4 plate center against the same lattice. This establishes
+a common M4 bottom-plate center for each bit group; electrical matching and
+parasitic balance still require extraction.
+
+**Native Mac evidence:** [Revised maps](../examples/rco/bank-floorplans.svg)
+show both patterns with no interior dummy line or staggered row. All four
+one-stage placements contain 154 PDK PCell instances. Native GDS readback
+measured zero offset from the 14.0 µm lattice for every trim/dummy M4
+bottom-plate center; Magic and KLayout each reported zero placement DRC
+findings. The final run IDs under `runs/rco/bank_placement/` are
+`be21f475-a91d-4400-bbca-7bfed6f3c28d` (SKY fan),
+`483adde3-3e9c-436c-88dc-d57c6fdf024a` (SKY centroid),
+`285ac6d4-42d8-43c7-b25c-6603f71c793c` (GF fan), and
+`5ed0d1f0-bf80-4a60-a59c-7859f0b6529f` (GF centroid). The isolated
+M4 fan probes again passed both DRC engines, with 2.755 µm SKY and
+2.05 µm GF side clearance. These are placement and local-corridor checks.
+Dummy plates still require ground routes; connected DRC, LVS, PEX, and the
+bank delay comparison remain open.
+
 ## Entry format for each taught concept
 
 Record the engineer's statement in ordinary language first. Then add:

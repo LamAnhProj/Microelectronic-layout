@@ -1,8 +1,8 @@
-"""Mirrored logical sites for one RCO trim bank; no electrical routing yet.
+"""Uniform-grid, mirrored RCO trim banks with no interior dummy channel.
 
-The fan's 17-site entry row holds eight mirrored pairs and a singleton. Its
-upper rows have 16 physically adjacent sites, shifted inward by half a pitch.
-Only edge sites remain dummy inside the fan; both styles retain a dummy ring.
+The fan's entry row and the centroid's middle row each hold 17 active sites.
+Other rows have a contiguous active span centered on the same column. Four
+MSB units occupy the center of those rows, so no MIM staggering is needed.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from examples.rco.run import passive_lines
 
 
 GRID = {"sky130": (5, 17), "gf180": (5, 17)}  # core; row 0 faces switches
-FAN_GRID = {"sky130": (5, 17), "gf180": (4, 17)}
+NARROW_SPAN = {"sky130": (1, 15), "gf180": (3, 13)}
 STYLE = {"sky130": "binary", "gf180": "balanced"}
 COLORS = ("#16a6a4", "#57a5db", "#8b75d6", "#cc6ec3", "#e67b9b",
           "#f3956b", "#ddb64d", "#a6ba46", "#477e47")
@@ -44,8 +44,19 @@ def entry_columns(process: str) -> dict[int, tuple[int, ...]]:
     return result
 
 
+def active_sites(process: str, variant: str) -> set[tuple[int, int]]:
+    if process not in GRID or variant not in ("fan", "centroid"):
+        raise ValueError("Choose a PDK and fan or centroid")
+    rows, cols = GRID[process]
+    left, right = NARROW_SPAN[process]
+    full_row = 0 if variant == "fan" else rows // 2
+    return {(row, col) for row in range(rows)
+            for col in (range(cols) if row == full_row else
+                        range(left, right + 1))}
+
+
 def fan_map(process: str) -> dict[str, tuple[int, int]]:
-    rows, _ = FAN_GRID[process]
+    rows, _ = GRID[process]
     names = units(process)
     placed: dict[str, tuple[int, int]] = {}
     occupied: set[tuple[int, int]] = set()
@@ -55,13 +66,17 @@ def fan_map(process: str) -> dict[str, tuple[int, int]]:
             name = names[bit].pop(0)
             placed[name] = (0, col)
             occupied.add((0, col))
+    # The MSB has an even unit count, so four central cells retain symmetry.
+    for row in range(1, rows):
+        placed[names[8].pop(0)] = (row, 8)
+        occupied.add((row, 8))
     # Place remaining units as mirrored pairs, clustered near their entry pair.
+    left_edge, _ = NARROW_SPAN[process]
     for bit in sorted(names, reverse=True):
         left_anchor = min(entry[bit])
         while names[bit]:
             candidates = [(row, col) for row in range(1, rows)
-                          for col in range(8)
-                          if not (row == rows - 1 and col in (0, 1))
+                          for col in range(left_edge, 8)
                           if (row, col) not in occupied and
                           (row, 16 - col) not in occupied]
             if not candidates or len(names[bit]) < 2:
@@ -81,6 +96,8 @@ def centroid_map(process: str) -> dict[str, tuple[int, int]]:
     placed: dict[str, tuple[int, int]] = {}
     single = singleton_bit(process)
     placed[names[single].pop(0)] = (2, 8)
+    for row in (0, 1, 3, 4):
+        placed[names[8].pop(0)] = (row, 8)
     center_pairs = [(2, col, 16 - col) for col in (7, 5, 3, 1, 6, 4, 2, 0)]
     # Two-unit groups and two four-unit groups fit the middle row.
     small = [bit for bit in range(9) if len(names[bit]) == 2]
@@ -92,9 +109,13 @@ def centroid_map(process: str) -> dict[str, tuple[int, int]]:
             row, left, right = center_pairs.pop(0)
             placed[names[bit].pop(0)] = (row, left)
             placed[names[bit].pop(0)] = (row, right)
+    for row, left, right in center_pairs:
+        placed[names[8].pop(0)] = (row, left)
+        placed[names[8].pop(0)] = (row, right)
     # A quartet is mirrored in x and y; every bit centroid is (2, 8).
-    quartets = [(row, left) for row in (1, 3, 0, 4) for left in range(8)
-                if row < 2]
+    left_edge, _ = NARROW_SPAN[process]
+    quartets = [(row, left) for row in (0, 1)
+                for left in range(left_edge, 8)]
     quartets.sort(key=lambda site: ((site[0] - 2) ** 2 +
                                     (site[1] - 8) ** 2, site))
     for bit in sorted(names, reverse=True):
@@ -118,7 +139,7 @@ def centroid_map(process: str) -> dict[str, tuple[int, int]]:
 def _check_map(process: str, placed: dict[str, tuple[int, int]],
                require_entry: bool = False) -> None:
     expected = {name for group in units(process).values() for name in group}
-    rows, cols = (FAN_GRID if require_entry else GRID)[process]
+    rows, cols = GRID[process]
     if set(placed) != expected or len(set(placed.values())) != len(placed):
         raise RuntimeError("Missing or overlapping capacitor positions")
     if any(not (0 <= row < rows and 0 <= col < cols)
@@ -132,46 +153,34 @@ def _check_map(process: str, placed: dict[str, tuple[int, int]],
         if require_entry and set((0, col) for col in entry_columns(process)[bit]) \
                 != {pos for pos in positions if pos[0] == 0}:
             raise RuntimeError(f"Bit {bit} lacks the entry-row placement")
-    if require_entry:
-        empty_core = {(row, col) for row in range(rows)
-                      for col in (range(cols) if row == 0 else
-                                  tuple(range(8)) + tuple(range(9, cols)))} \
-                     - set(placed.values())
-        if empty_core != {(rows - 1, col) for col in (0, 1, 15, 16)}:
-            raise RuntimeError("Fan has an interior dummy or disconnected row")
+    variant = "fan" if require_entry else "centroid"
+    if set(placed.values()) != active_sites(process, variant):
+        raise RuntimeError(f"{variant} has a gap in its active row span")
 
 
 def dummy_sites(process: str, variant: str) -> set[tuple[int, int]]:
     if variant not in ("fan", "centroid"):
         raise ValueError("Choose fan or centroid")
     placed = fan_map(process) if variant == "fan" else centroid_map(process)
-    rows, cols = (FAN_GRID if variant == "fan" else GRID)[process]
+    rows, cols = GRID[process]
     return {(row, col) for row in range(-1, rows + 1)
-            for col in (range(-1, cols + 1) if variant == "centroid" or row <= 0
-                        else tuple(range(-1, 8)) + tuple(range(9, cols + 1)))} \
-           - set(placed.values())
+            for col in range(-1, cols + 1)} - set(placed.values())
 
 
 def site_x(process: str, variant: str, row: int, col: int,
            pitch: float, origin: float = 0.0) -> float:
-    """Physical x coordinate; upper fan halves close the vacant center slot."""
+    """Every MIM site uses the same column lattice; no row staggering."""
     if process not in GRID or variant not in ("fan", "centroid"):
         raise ValueError("Choose a PDK and fan or centroid")
-    if variant == "fan" and row > 0:
-        if col == 8:
-            raise ValueError("Upper fan rows have no center site")
-        return origin + (col + 0.5 if col < 8 else col - 0.5) * pitch
     return origin + col * pitch
 
 
 def text_map(process: str, variant: str) -> str:
     placed = fan_map(process) if variant == "fan" else centroid_map(process)
     cells = {pos: int(name.split("_")[1]) for name, pos in placed.items()}
-    rows, cols = (FAN_GRID if variant == "fan" else GRID)[process]
+    rows, cols = GRID[process]
     return "\n".join(" ".join(str(cells.get((row, col), "D"))
-                               for col in (range(-1, cols + 1)
-                                           if variant == "centroid" or row <= 0 else
-                                           tuple(range(-1, 8)) + tuple(range(9, cols + 1))))
+                               for col in range(-1, cols + 1))
                      for row in reversed(range(-1, rows + 1)))
 
 
@@ -185,15 +194,13 @@ def svg() -> str:
     for process_index, process in enumerate(("sky130", "gf180")):
         for variant_index, variant in enumerate(("fan", "centroid")):
             x0, y0 = 30 + variant_index * 730, 80 + process_index * 330
-            rows, cols = (FAN_GRID if variant == "fan" else GRID)[process]
+            rows, cols = GRID[process]
             mapping = fan_map(process) if variant == "fan" else centroid_map(process)
             cells = {pos: int(name.split("_")[1]) for name, pos in mapping.items()}
             label = f'{"SKY130A" if process == "sky130" else "GF180MCU D"} · {"edge fan" if variant == "fan" else "common centroid"} · {rows}×{cols} core'
             parts.append(f'<text x="{x0}" y="{y0}" class="title">{label}</text>')
             for row in range(-1, rows + 1):
-                columns = (range(-1, cols + 1) if variant == "centroid" or row <= 0
-                           else tuple(range(-1, 8)) + tuple(range(9, cols + 1)))
-                for col in columns:
+                for col in range(-1, cols + 1):
                     bit = cells.get((row, col))
                     x = site_x(process, variant, row, col, 37, x0 + 37)
                     y = y0 + 18 + (rows - row) * 31
@@ -202,7 +209,7 @@ def svg() -> str:
                     parts.append(f'<text x="{x+17}" y="{y+14}" class="bit">{bit if bit is not None else "D"}</text>')
             if variant == "fan":
                 parts.append(f'<text x="{x0}" y="{y0+245}" class="small">bottom active row faces switches; MSB pair straddles center singleton</text>')
-    parts.append('<text x="30" y="720" class="small">Fan upper rows close the central slot; centroid retains its regular grid. Base MIM sits outside. Dummy plates require ground routes and LVS.</text>')
+    parts.append('<text x="30" y="720" class="small">All MIM centers use one uniform grid. Active row spans have no holes; dummies occupy outer edges and the ring. Ground routes and LVS remain open.</text>')
     parts.append("</svg>")
     return "\n".join(parts) + "\n"
 
