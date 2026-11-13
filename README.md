@@ -89,7 +89,7 @@ and [validation record](docs/validation.md).
   edits, separate snapshot saving and private UUID jobs/reports.
 - Manifest-based circuit runs with input hashes and measured acceptance criteria.
 - Local engineering-note search using SQLite FTS5, without embeddings or a GPU.
-- Six agent procedures in `.agents/skills/`, also exposed in `.github/skills`.
+- Seven agent procedures in `.agents/skills/`, including floorplanning, also exposed in `.github/skills`.
 - A restricted Docker worker and dry-run-first R2 archive script.
 - A source registry for evaluating PDKs and circuit examples before bulk downloads.
 

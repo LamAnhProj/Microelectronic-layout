@@ -81,8 +81,10 @@ not from the Mac.
 - Circuit manifests declare input files and measured acceptance criteria;
   run-circuit copies/hashes inputs and checks ngspice measurements.
 - SQLite FTS5 retrieval over three original teaching notes; no local LLM/GPU.
-- Six skills: lab-environment, layout-inspect, layout-edit, layout-verify,
-  circuit-simulate, lab-record, in .agents/skills with .github/skills alias.
+- At handoff, six skills: lab-environment, layout-inspect, layout-edit,
+  layout-verify, circuit-simulate, lab-record, in .agents/skills with
+  .github/skills alias. The floorplan skill was added later; see
+  docs/agent-workflow.md for the current inventory.
 
 Checks: make doctor; make test; make index; make smoke; make layout-smoke;
 make worker-build; make qualify. Eleven host tests were discovered: nine passed

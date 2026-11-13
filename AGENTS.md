@@ -1,6 +1,7 @@
 # Engineering operating conventions
 
 Read `docs/architecture.md` and the matching skill in `.agents/skills/`.
+Use `floorplan` for placement planning before detailed RCO or mixed-signal layout.
 Existing Cadence scripts are reference material and require Virtuoso.
 The lab is for custom analog/mixed-signal layout first.
 
