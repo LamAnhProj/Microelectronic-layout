@@ -1377,6 +1377,24 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def serve_floorplan_svg(self, name: str) -> None:
+        allowed = {
+            "01-original-mirrored.svg", "02-compact-no-center-dummies.svg",
+            "03-uniform-grid.svg", "04-grouped-current.svg",
+            "05-exact-centroid-reference.svg",
+        }
+        if name not in allowed:
+            raise ValueError("Unknown floorplan snapshot")
+        body = (ROOT / "examples" / "rco" / "floorplan-history" / name).read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/svg+xml")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy",
+                         "sandbox; default-src 'none'; style-src 'unsafe-inline'")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlsplit(self.path)
         q = {key: values[0] for key, values in parse_qs(parsed.query).items()}
@@ -1387,6 +1405,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.serve_static("app.js", "text/javascript; charset=utf-8")
             if parsed.path == "/style.css":
                 return self.serve_static("style.css", "text/css; charset=utf-8")
+            if parsed.path in {"/floorplans", "/floorplans/"}:
+                return self.serve_static("floorplans.html", "text/html; charset=utf-8")
+            if parsed.path == "/floorplans.css":
+                return self.serve_static("floorplans.css", "text/css; charset=utf-8")
+            if parsed.path == "/floorplans.js":
+                return self.serve_static("floorplans.js", "text/javascript; charset=utf-8")
+            if parsed.path.startswith("/floorplans/"):
+                return self.serve_floorplan_svg(parsed.path.removeprefix("/floorplans/"))
             if parsed.path == "/api/overview":
                 return self.reply(200, {"token": TOKEN, "processes": PROCESSES,
                                         "runs": {p: run_list(p) for p in PROCESSES},

@@ -487,6 +487,31 @@ remain open. Use the [main comparison](../examples/rco/bank-floorplans.svg)
 and [exact centroid reference](../examples/rco/bank-centroid-reference.svg)
 to review the tradeoff.
 
+## FP-010 · Restore the floorplan decision history
+
+The current grouped drawing had replaced the earlier comparison SVG, making the
+original mirrored fan, compact fan, and uniform-grid proposals hard to inspect.
+The engineer requested that every version remain visible for comparison. The
+four committed SVGs are now immutable, named snapshots under
+[`examples/rco/floorplan-history/`](../examples/rco/floorplan-history/), with
+the separate exact-centroid reference as a fifth entry. The [Chip Lab comparison
+page](http://127.0.0.1:8765/floorplans/) displays any two revisions side by
+side or stacked, with zoom and full-size links. The current grouped plan remains
+the default on the right; the earliest mirrored plan is the default on the left.
+
+**Decision history:** The first plan used a center dummy channel. The compact
+revision removed it but staggered MIM rows. The next aligned all MIM centers
+on a uniform grid, while several same-bit groups stayed separated. The latest
+plan moves bit 8 to the outer fan edge and keeps each bit's units adjacent.
+Its centered comparison is grouped, not an exact common centroid. The exact
+centroid is retained separately because exact centroid and every-bit adjacency
+conflict for the one-unit and two-unit weights on this grid.
+
+**Scope of evidence:** These are one-stage logical placement maps for SKY130A
+and GF180MCU D. Prior native Mac placement DRC results are recorded in the
+corresponding entries above. The images are not routed netlists. Dummy ties,
+LVS, PEX, and post-layout delay or frequency comparisons remain unknown.
+
 ## Entry format for each taught concept
 
 Record the engineer's statement in ordinary language first. Then add:
