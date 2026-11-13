@@ -72,6 +72,7 @@ LVS_VARIANTS = {
 }
 COORDINATE = re.compile(r"(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)")
 DOCS = [
+    "knowledge/lab-book.md",
     "README.md", "dashboard/README.md", "docs/gui-workflow.md", "docs/validation.md",
     "docs/setup-macos.md", "docs/pdks-and-data.md",
     "docs/architecture.md", "docs/bridge.md", "docs/agent-workflow.md",

@@ -17,6 +17,9 @@ a plugin into ChatGPT or change the underlying language model.
 6. Simulate a project: `chip-lab run-circuit PATH/TO/design.json`.
 7. Record: retain reports and source hashes; preview R2 transfer before upload.
 
+Record engineer-taught floorplanning rules, agent interpretations, predictions,
+and corrections in `knowledge/lab-book.md` as the design progresses.
+
 Prefix local commands with `uv run --frozen --extra layout`. For complete Linux
 tools, use `docker compose run --rm worker COMMAND ...`. The worker has the
 same source commands, but no PyPI geometry package; its KLayout executable and
