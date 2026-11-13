@@ -111,3 +111,41 @@ phase spacing in extracted layouts. A common geometric row does not imply
 equal parasitics without matched routing layers, path lengths, vias, and
 coupling environments. Keep this as a reviewed sketch until the engineer
 chooses the edge and detailed MSB connection.
+
+## FP-005 — Mirror each bit and surround both banks with ground dummies
+
+**Source:** Engineer clarification, 2026-11-12. The entry row faces the bit
+switches and shared bank route. Compare fan and common-centroid arrangements
+using the same isolated bank/switch hierarchy. Fill all internal holes with
+grounded dummies, use a complete dummy perimeter, and mirror each active
+bit group left to right as well as the rectangular outline.
+
+**Decision path:** Count unit populations by bit. If one entry unit per even
+bit cannot satisfy per-bit mirroring, allocate an entry pair. Keep the odd
+population on the symmetry axis. For this circuit, eight pairs plus one
+single require 17 entry columns. Use the same footprint for both variants,
+place actual dummy PCells at every other site, then explicitly route both
+dummy plates to ground and prove connectivity with LVS. Do not call an
+unwired dummy grounded.
+
+**Agent implementation and test:** A 17×5 core with one-site dummy perimeter
+is documented in the lab book FP-005 entry. The geometry is a proposal;
+compare post-layout bit weights and delay before preferring either style.
+
+## FP-006 — Reserve a non-minimum single-wire corridor
+
+**Source:** Engineer request, 2026-11-12, to check PDK design rules for a
+wire between MIM capacitors with extra clearance to reduce coupling.
+
+**Decision path:** For each PDK, read the applicable MIM bottom-plate rule,
+wire width rule, PCell layer geometry, and pinned DRC deck. Choose a wire
+width and plate-edge clearance above the minimum. Check the complete route
+and vias with DRC; extract R/C and sweep spacing. Do not infer minimum total
+parasitic capacitance from larger geometric clearance alone, because longer
+wires and grounded neighbors contribute load.
+
+**Current proposal:** One 0.5 µm M4 wire with 2.0 µm clearance to each M4
+plate edge needs a 4.5 µm channel. At 14.0 µm site pitch, saved unit PCells
+leave at least 6.01 µm SKY and 4.60 µm GF horizontal M4 gap. These are
+geometry calculations, not a routed-wire result. The source rules, physics,
+and validation state are in lab book FP-006.

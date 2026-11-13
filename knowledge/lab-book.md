@@ -229,6 +229,101 @@ neighbors, and ground return still matter.
 next to the bit switches and how the MSB's many parallel units join it.
 No layout, DRC, LVS, PEX, or new simulation was executed for FP-004.
 
+## 2026-11-12 — FP-005: Mirrored entry row and dummy perimeter
+
+**Engineer guidance:** The common connection row is the edge facing the bit
+switches and shared bank route. Compare an edge-anchored fan against a
+traditional common centroid in a separate cap-bank-and-switch testbench. Every
+empty array site is a dummy tied to ground. Surround each bank with a dummy
+ring. Both the rectangle and every bit's active cells should mirror left to
+right. Build and test hierarchically.
+
+**Geometry constraint and agent resolution:** Eight bit populations are even
+and one is odd: bit 3 for SKY130A, bit 4 for GF180MCU D. A mirrored entry
+row with one pair per even bit and one singleton needs `8×2 + 1 = 17`
+columns. A 17×5 core gives one center row for the common-centroid option.
+Both variants use this same core and a one-site dummy perimeter, producing
+a 19×7 site rectangle. This is wider than the earlier count-only 9×9 or 8×8
+sketches; the earlier sketches cannot meet the new per-bit mirrored entry-row
+condition. The singleton occupies the center site, so the MSB's two entry
+cells straddle it at columns 7 and 9. The MSB region is centered as a pair,
+not one cell on the axis. Review this deliberate tradeoff in the [logical
+maps](../examples/rco/bank-floorplans.svg).
+
+**Population per stage:** SKY has 77 active trim MIMs, 8 internal dummy sites,
+and 48 perimeter dummy sites. GF has 61 active, 24 internal dummies, and 48
+perimeter dummies. The base MIM remains outside the grid. Dummies are actual
+MIM PCells in the placement, but neither plate has been physically routed to
+ground. The ground connection and its LVS evidence remain open.
+
+**Standalone electrical baseline:** `examples/rco/bank_block.py` defines
+`RCO_BANK` with one base MIM, a master transmission gate, nine bit transmission
+gates, and PDK MIM networks. Its AC and transient bench uses ideal static
+control levels. On native arm64 Mac ngspice, code 0 → 1 changed the SKY
+effective capacitance from 544.081 to 552.932 fF and half-supply step delay
+from 174.635 to 177.221 ns. GF changed 571.221 → 580.354 fF and
+182.385 → 184.918 ns. Runs are under `runs/rco/bank_bench/`. These are
+schematic-level results: fan and centroid have the same ideal netlist, so
+their electrical results cannot differ until routed extraction exists.
+
+## 2026-11-12 — FP-006: Non-minimum M4 corridor between MIM units
+
+**Engineer request:** Check the design-rule manual for a wire between MIM
+capacitors with more than minimum spacing, aiming to reduce parasitic
+capacitance. This is a placement and routing hypothesis, not a measured
+low-capacitance result.
+
+**Rule evidence:** GF180MCU option B `MIMTM.1` requires 1.2 µm between a
+MIM bottom plate and adjacent bottom-plate or unrelated routing metal.
+Its ordinary M4 width/spacing minima are 0.28 µm. In the installed SKY130A
+KLayout deck, `cap2m.2b_a` checks 1.2 µm between M4 bottom plates, and
+`cap2m.11` checks 0.5 µm from the MIM marker to unrelated M4. The SKY130
+M4 width minimum is 0.30 µm. Check the complete PCell shapes and deck
+because these rules do not by themselves certify a wire with vias.
+Sources: [GF MIM option B](https://gf180mcu-pdk.readthedocs.io/en/latest/physical_verification/design_manual/drm_10_4_2.html),
+[GF Metaln rules](https://gf180mcu-pdk.readthedocs.io/en/latest/physical_verification/design_manual/drm_07_14.html),
+[SKY130 periphery rules](https://skywater-pdk.readthedocs.io/en/main/rules/periphery.html),
+and the pinned `pdks/volare/sky130A/libs.tech/klayout/drc/sky130A_mr.drc`.
+
+**Agent corridor proposal:** Reserve a 0.5 µm wide M4 signal wire with
+2.0 µm from each adjacent M4 plate edge: `2.0 + 0.5 + 2.0 = 4.5 µm`
+plate-edge gap. This exceeds both PDKs' cited minima. From saved PCell GDS,
+the widest SKY trim-unit M4 bbox is 7.99 µm across; the widest GF M4 bbox
+is 9.40 µm. At a 14.0 µm site pitch, the calculated horizontal plate gaps
+are at least 6.01 µm SKY and 4.60 µm GF. The vertical gaps are larger for
+the measured units. This clearance is
+for **one straight wire between units**. Via landing, turns, PCell pins,
+other metal shapes, and dummy ground ties require a routed DRC check.
+
+**Physics and sweep:** A larger side gap tends to reduce lateral coupling
+approximately as `C_c ∝ εL/d` in a simple sidewall model. Increasing pitch
+also lengthens wires, increasing `R_wire ∝ L/(w t)` and their ground/fringe
+capacitance; a grounded shield can lower cross-coupling while increasing
+signal-to-ground load. Therefore the widest possible spacing is not
+automatically the fastest oscillator. Sweep plate gaps around 4.5, 6.5,
+and 8.5 µm after routing; compare extracted per-bit R/C, transient delay,
+trim monotonicity, 512 kHz trim error, and stage phase spacing.
+
+**Correction during review:** An initial 12.5 µm pitch calculation mistook
+GF GDS layer 41/0 (Via4) for Metal4. The actual Metal4 is 46/0; its wider
+plate prompted the 14.0 µm pitch. The earlier 12.5 µm placement DRC was
+clear, but it did not meet this *non-minimum* corridor target. The probe
+must be checked on the real Metal4 layer after the correction.
+
+**Native Mac check after correction:** All four 14.0 µm pitch placements
+(SKY/GF × fan/centroid) have zero Magic errors and zero KLayout DRC items.
+With a separate floating 0.5×3.0 µm M4 probe between active bit-7 and bit-8
+entry PCells, GDS readback measures 2.755 µm side clearance in SKY and
+2.05 µm in GF. Both probe layouts also have zero Magic errors and zero
+KLayout DRC items. The probe was revised after a corner-origin placement
+error caused its first version to overlap a plate; the validator now
+explicitly rejects overlap and checks the measured GDS clearance. Final
+verified probe runs are `d642239b-e81f-4eae-ba07-62da78c5936a` (SKY)
+and `3a11063a-7881-4f21-8186-156d18967ed2` (GF), under
+`runs/rco/bank_placement/`. The test wire is floating and only 3 µm long.
+Route the actual bank signals, ground the dummies, run connected DRC/LVS
+and PEX, then compare the variants electrically.
+
 ## Entry format for each taught concept
 
 Record the engineer's statement in ordinary language first. Then add:

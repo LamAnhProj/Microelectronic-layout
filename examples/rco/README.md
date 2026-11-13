@@ -361,6 +361,45 @@ KLayout would diverge from the schematic and invalidate the recorded hashes.
 
 ## Reproduce the current Mac checks
 
+### Isolated capacitor-bank comparison
+
+The [bank floorplan SVG](bank-floorplans.svg) shows one stage's edge fan and
+common-centroid proposals side by side for both PDKs. A 17×5 active core
+provides a mirrored pair for each even-population bit on the fan entry row;
+the one odd bit sits on the center line. Every unused site and the surrounding
+one-site ring contains a dummy MIM PCell. Those dummy plates are **intended**
+for ground but are not connected yet. The same hierarchical schematic is
+used for both placements, so schematic waveforms are identical by variant.
+
+At 14.0 µm site pitch, the measured M4 bottom-plate shapes leave at least
+6.01 µm between SKY units and 4.60 µm between the widest GF units. A 0.5 µm
+M4 wire centered in either gap has at least 2.0 µm side clearance. The
+`--corridor-probe` option places one floating, 3 µm long M4 test rectangle
+between active bit-7 and bit-8 entry cells solely for local DRC. It is not
+a connected bank signal. GDS readback measured 2.755 µm side clearance
+in SKY and 2.05 µm in GF; Magic and KLayout reported zero DRC findings for
+both probes. The GF M4 layer is GDS `46/0`; `41/0` is Via4.
+See lab-book FP-005 and FP-006 for rule sources and the spacing tradeoff.
+
+```sh
+.venv/bin/python -m examples.rco.bank_floorplan
+.venv/bin/python -m examples.rco.bank_block sky130 0
+.venv/bin/python -m examples.rco.bank_block gf180 1
+.venv/bin/python -m examples.rco.validate_bank_placement sky130 fan
+.venv/bin/python -m examples.rco.validate_bank_placement sky130 centroid
+.venv/bin/python -m examples.rco.validate_bank_placement gf180 fan
+.venv/bin/python -m examples.rco.validate_bank_placement gf180 centroid
+.venv/bin/python -m examples.rco.validate_bank_placement sky130 fan --corridor-probe
+.venv/bin/python -m examples.rco.validate_bank_placement gf180 fan --corridor-probe
+```
+
+These checks establish PDK-device placement and local DRC only. Before
+comparing layout-dependent delay or capacitance, route the bit and dummy
+nets, check connected DRC and LVS, extract parasitic R/C, and rerun the
+isolated bank bench with each extracted netlist.
+
+### Full RCO checks
+
 Run these from the repository root. Each command writes a new private,
 ignored report under `runs/rco/` and prints its location. The full GF AC bank
 sweep runs 512 PDK simulations; the bounded transient sweep runs 26.
