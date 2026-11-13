@@ -1,6 +1,7 @@
 # Engineering operating conventions
 
-Read `docs/architecture.md` and the matching skill in `.agents/skills/`.
+Read the matching skill in `.agents/skills/` for the task. Read
+`docs/architecture.md` when work touches the live editor or execution boundaries.
 Use `floorplan` for placement planning before detailed RCO or mixed-signal layout.
 Existing Cadence scripts are reference material and require Virtuoso.
 The lab is for custom analog/mixed-signal layout first.

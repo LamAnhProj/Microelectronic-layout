@@ -1,16 +1,20 @@
 ---
 name: floorplan
-description: Plan analog or mixed-signal block placement before detailed layout, recording the engineer's placement method, constraints, tradeoffs and evidence. Use for the RCO or later circuits when choosing relative positions, dimensions and routing priorities.
+description: Floorplan analog or mixed-signal circuits before detailed layout. Use when choosing RCO or other circuit block positions, dimensions, orientations, pins, and routing priorities.
 ---
 
 # Floorplanning with the engineer
 
-Use this skill to turn the engineer's step-by-step layout method into a reviewable floorplan. Record a rule only after the engineer supplies it or an exact PDK source supports it. Keep a running decision log with the choice, physical reason, expected electrical effect, alternatives considered, and evidence needed to test it. Ask for the next missing decision when it changes placement materially.
+Turn the engineer's step-by-step method into a reviewable floorplan. Keep the entry point short: when the engineer teaches a reusable concept, put its definition, physical cause, applicable conditions, exceptions, and observable test in `references/concepts.md` (create that file when the first concept is supplied). Link a process-specific reference only when that process actually needs different guidance. Do not promote an agent proposal to an engineer-taught rule.
 
-For this lab, start with the current circuit specification and schematic, then identify the actual device inventory, pin and power domains, critical and sensitive nets, device dimensions, and process-specific spacing or matching constraints. Make a separate plan for SKY130A and GF180MCU D; do not transplant dimensions or rules between them. Estimate block areas and wire lengths with units, and label estimates as estimates.
+## Decision path
 
-Produce a placement view showing block outlines, relative positions, orientation, pin locations, power paths, and intended routing corridors. Explain how each choice affects delay, coupling, matching, supply drop, substrate noise, or trim behavior. Record any tradeoff between shorter critical connections and a larger, easier-to-route floorplan. Keep the instructor's stated method distinct from the agent's proposals.
+1. Read the current circuit specification and schematic. Inventory devices, pins, supply domains, critical and sensitive nets, dimensions, and constraints. Mark unknowns.
+2. If the PDK changes, make a separate plan and resolve dimensions, grid, and spacing against that exact PDK. Never transplant numerical rules from SKY130A to GF180MCU D or vice versa.
+3. If an instructor rule applies, record its physical reason and use it. If its conditions are unclear, ask before making a consequential placement choice. If the agent proposes a choice, label the assumption and prediction.
+4. Draw block outlines, relative positions, orientations, pins, power paths, and routing corridors. Estimate area and important wire lengths with units. Record each choice, expected effect, tradeoff, and test.
+5. After each revision, compare predicted delay, coupling, matching, supply drop, substrate noise, and trim behavior with available evidence. Explain mismatches, change one meaningful choice, and repeat until the agreed placement criteria are met or the remaining gap is explicit.
 
-Before editing geometry, use `layout-inspect` to bind the target file, cell, PDK revision, grid, and source hash. Use `layout-edit` for guarded changes and a separate saved snapshot. Run `layout-verify` on that snapshot; treat an unrouted placement as placement evidence only, never as a connected circuit or LVS/PEX pass. Compare extracted behavior with `circuit-simulate` only after routing and extraction exist. Preserve decisions and failures with `lab-record`.
+Before editing geometry, use `layout-inspect` to bind the target file, cell, PDK revision, grid, and source hash. Use `layout-edit` for guarded changes and a separate saved snapshot. Run `layout-verify` on that snapshot. If it is unrouted, report placement and DRC evidence only; connectivity, LVS, PEX, and post-layout frequency remain unknown. Compare extracted behavior with `circuit-simulate` after routing and extraction exist. Preserve decisions and failed hypotheses with `lab-record`.
 
 The initial RCO placement in `runs/rco/placement/` is a device placement experiment. Its DRC result does not establish routing, connectivity, LVS, PEX, or post-layout frequency. Review `examples/rco/README.md` for the actual topology and the selected PDK before extending it.

@@ -3,6 +3,8 @@
 The repository's `AGENTS.md` directs the agent to seven skills in `.agents/skills/`.
 `.github/skills` exposes the same files for compatible Copilot clients. Work from
 this repository and start a fresh agent session after adding/updating skills.
+On this Mac, `~/.codex/skills/floorplan` links to the repository skill so Codex
+can discover it from another workspace after a fresh session.
 The running cloud assistant reads them directly; writing files does not install
 a plugin into ChatGPT or change the underlying language model.
 
