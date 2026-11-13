@@ -512,6 +512,27 @@ and GF180MCU D. Prior native Mac placement DRC results are recorded in the
 corresponding entries above. The images are not routed netlists. Dummy ties,
 LVS, PEX, and post-layout delay or frequency comparisons remain unknown.
 
+## FP-011 · Interactive placement exercise and remaining-device count
+
+The engineer requested movable versions of all saved floorplans and a visual
+countdown of devices still to place. The [comparison page](http://127.0.0.1:8765/floorplans/)
+now reads each saved SVG's actual site coordinates into an interactive one-stage
+bank editor. Choose any historical revision and either PDK/proposal, then drag
+or click MIM units to move them. Starting from an empty practice board makes
+the remaining count descend from 77 SKY130A or 61 GF180MCU D trim units to
+zero. The per-bit counter keeps the exact population of each trim bit visible.
+The dummy perimeter stays fixed. Each panel has a separate browser-local draft,
+undo and reset; a JSON download records a draft for later review.
+
+**Teaching interpretation:** Each numbered tile represents one MIM unit, not
+an entire binary-weighted bank or a routed device. Moving a unit changes a
+logical placement proposal and may alter future route length and coupling.
+The live counter measures inventory only. No wire resistance, capacitance,
+phase shift, or frequency can be inferred from dragging a tile. A candidate
+must later be translated into process-specific GDS, connected to switches,
+have dummies actually tied to ground, and pass DRC, LVS, PEX, and transient
+trim checks before comparing performance.
+
 ## Entry format for each taught concept
 
 Record the engineer's statement in ordinary language first. Then add:

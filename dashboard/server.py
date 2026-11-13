@@ -1411,6 +1411,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.serve_static("floorplans.css", "text/css; charset=utf-8")
             if parsed.path == "/floorplans.js":
                 return self.serve_static("floorplans.js", "text/javascript; charset=utf-8")
+            if parsed.path == "/floorplan-data.json":
+                return self.serve_static("floorplan-data.json", "application/json; charset=utf-8")
             if parsed.path.startswith("/floorplans/"):
                 return self.serve_floorplan_svg(parsed.path.removeprefix("/floorplans/"))
             if parsed.path == "/api/overview":

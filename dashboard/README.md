@@ -76,9 +76,20 @@ RCO topology, capacitor word, master PMOS/NMOS switch, 512 kHz target, saved
 Mac ngspice waveform, exact hashed deck, and a step-by-step engineering
 decision log. Select a saved run or enter a new 0–511 code and use **Run native
 ngspice**. The process dropdown changes between SKY130A and GF180MCU D; the
-GF180 oscillator supply is 3.3 V and its control inputs are 1.8 V. RCO
-resistors and capacitors are ideal SPICE elements at this stage. Its schematic
-layout, DRC/LVS, and PEX are not yet represented by the inverter pages.
+GF180 oscillator supply is 3.3 V and its control inputs are 1.8 V. The RCO
+offers ideal and PDK passive models and native Xschem source. Its device
+placement is unrouted; connected-layout LVS, PEX, and post-layout frequency
+checks remain open.
+
+The RCO page links to the [floorplan comparison](http://127.0.0.1:8765/floorplans/).
+Its five saved revisions include 18 editable one-stage bank panels across the
+two PDKs. In the placement sandbox, choose a revision and panel, then click or
+drag numbered MIM units between interior sites. **Start empty** turns it into
+a 77-unit SKY130A or 61-unit GF180MCU D placement exercise with a live
+remaining-device counter and progress bar. The perimeter dummy sites stay
+fixed. Drafts are saved in browser local storage per panel, with undo, reset,
+and a JSON download. The editor does not change GDS or verify electrical
+connectivity, dummy ties, DRC, LVS, PEX, or post-layout frequency.
 
 The **DRC / LVS** view now parses KLayout marker coordinates and Netgen
 comparisons, including GF180's deliberate failing controls. **PEX** displays
