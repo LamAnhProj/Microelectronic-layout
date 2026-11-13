@@ -364,12 +364,18 @@ KLayout would diverge from the schematic and invalidate the recorded hashes.
 ### Isolated capacitor-bank comparison
 
 The [bank floorplan SVG](bank-floorplans.svg) shows one stage's edge fan and
-common-centroid proposals side by side for both PDKs. A 17×5 active core
-provides a mirrored pair for each even-population bit on the fan entry row;
-the one odd bit sits on the center line. Every unused site and the surrounding
-one-site ring contains a dummy MIM PCell. Those dummy plates are **intended**
-for ground but are not connected yet. The same hierarchical schematic is
-used for both placements, so schematic waveforms are identical by variant.
+common-centroid proposals side by side for both PDKs. The fan entry row has
+17 sites: a mirrored pair for each even-population bit and one center
+singleton. The upper fan rows have 16 adjacent sites, shifted inward by half
+a pitch on each side; there is no central dummy column. The SKY fan has five
+active rows and the GF fan has four. Only two mirrored pairs at the far-row
+outer edges are internal dummies. A one-site dummy ring surrounds each bank.
+The centroid comparison remains on its regular 17×5 grid, so the GF fan and
+centroid now have different footprints. Compare extracted route lengths and
+area alongside delay, rather than attributing all differences to bit order.
+Those dummy plates are **intended** for ground but are not connected yet.
+The same hierarchical schematic is used for both placements, so schematic
+waveforms are identical by variant.
 
 At 14.0 µm site pitch, the measured M4 bottom-plate shapes leave at least
 6.01 µm between SKY units and 4.60 µm between the widest GF units. A 0.5 µm

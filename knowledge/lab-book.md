@@ -324,6 +324,50 @@ and `3a11063a-7881-4f21-8186-156d18967ed2` (GF), under
 Route the actual bank signals, ground the dummies, run connected DRC/LVS
 and PEX, then compare the variants electrically.
 
+## 2026-11-12 — FP-007: Close the fan's central dummy channel
+
+**Engineer correction:** The fan must not have a line of dummies through its
+middle. Active capacitor units should be adjacent in a compact bank. Change
+rows and columns as needed. The outer dummy ring and per-bit left/right
+mirroring taught in FP-005 still apply.
+
+**Why the first map had a channel:** Eight bit populations are even, and the
+single odd-population bit occupies the entry-row axis. On a uniform 17-site
+row, left/right mirroring forces every upper-row active unit to have a partner
+on the other side of column 8; no unit can occupy that axis without breaking
+the per-bit count or symmetry. Filling the axis with dummy PCells made a
+continuous grounded-dummy channel, contrary to the new guidance.
+
+**Agent geometry change:** Keep 17 sites on the switch-facing entry row.
+Remove the central *site* from every upper fan row and shift the left and
+right eight-site halves inward by half a 14.0 µm pitch. Their innermost
+unit origins are now one pitch apart, so active cells are adjacent across
+the former center. This is a compact, symmetric, staggered array with an
+orthogonal step at the entry edge. SKY needs five active rows (17 + 4×16
+capacity); GF needs four (17 + 3×16). In both, the only unfilled core sites
+are two mirrored pairs at the far-row **outer** ends. All such sites and
+the perimeter receive dummy MIM PCells. MIM plate polygons do not literally
+touch: the PDK requires separation, and the 14.0 µm pitch preserves the
+non-minimum corridor measured in FP-006.
+
+**Comparison caveat:** The common-centroid option stays on its regular 17×5
+grid. GF fan and centroid therefore differ in footprint as well as unit
+ordering. Later PEX comparisons must report area and actual path lengths
+with waveform and trim data; they cannot attribute every difference to the
+placement pattern alone.
+
+**Native Mac checks:** `examples/rco/bank_floorplan.py` rejects a fan map
+with any unexpected interior hole. The [updated bank maps](../examples/rco/bank-floorplans.svg)
+show adjacent upper-row active sites. SKY fan has 149 GDS PCell instances,
+including 51 dummies; GF has 131, including 49 dummies. Both updated
+placements passed Magic and KLayout with zero DRC findings. Both local M4
+probes also passed with zero findings and retained the measured 2.755 µm
+SKY and 2.05 µm GF plate clearance. The final fan placement run IDs are
+`b56397a5-c7f0-4082-b813-0c82aeacaf90` (SKY) and
+`7e6ebc6b-33ac-420e-8558-b3fa8977b752` (GF), under
+`runs/rco/bank_placement/`. Ground ties, electrical LVS, and bank PEX
+remain open.
+
 ## Entry format for each taught concept
 
 Record the engineer's statement in ordinary language first. Then add:

@@ -1,7 +1,8 @@
 """Mirrored logical sites for one RCO trim bank; no electrical routing yet.
 
-The 17-column entry row holds eight mirrored pairs and one center singleton.
-All unused core sites and the one-cell perimeter are proposed ground dummies.
+The fan's 17-site entry row holds eight mirrored pairs and a singleton. Its
+upper rows have 16 physically adjacent sites, shifted inward by half a pitch.
+Only edge sites remain dummy inside the fan; both styles retain a dummy ring.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from examples.rco.run import passive_lines
 
 
 GRID = {"sky130": (5, 17), "gf180": (5, 17)}  # core; row 0 faces switches
+FAN_GRID = {"sky130": (5, 17), "gf180": (4, 17)}
 STYLE = {"sky130": "binary", "gf180": "balanced"}
 COLORS = ("#16a6a4", "#57a5db", "#8b75d6", "#cc6ec3", "#e67b9b",
           "#f3956b", "#ddb64d", "#a6ba46", "#477e47")
@@ -43,6 +45,7 @@ def entry_columns(process: str) -> dict[int, tuple[int, ...]]:
 
 
 def fan_map(process: str) -> dict[str, tuple[int, int]]:
+    rows, _ = FAN_GRID[process]
     names = units(process)
     placed: dict[str, tuple[int, int]] = {}
     occupied: set[tuple[int, int]] = set()
@@ -56,8 +59,9 @@ def fan_map(process: str) -> dict[str, tuple[int, int]]:
     for bit in sorted(names, reverse=True):
         left_anchor = min(entry[bit])
         while names[bit]:
-            candidates = [(row, col) for row in range(1, 5)
+            candidates = [(row, col) for row in range(1, rows)
                           for col in range(8)
+                          if not (row == rows - 1 and col in (0, 1))
                           if (row, col) not in occupied and
                           (row, 16 - col) not in occupied]
             if not candidates or len(names[bit]) < 2:
@@ -114,7 +118,7 @@ def centroid_map(process: str) -> dict[str, tuple[int, int]]:
 def _check_map(process: str, placed: dict[str, tuple[int, int]],
                require_entry: bool = False) -> None:
     expected = {name for group in units(process).values() for name in group}
-    rows, cols = GRID[process]
+    rows, cols = (FAN_GRID if require_entry else GRID)[process]
     if set(placed) != expected or len(set(placed.values())) != len(placed):
         raise RuntimeError("Missing or overlapping capacitor positions")
     if any(not (0 <= row < rows and 0 <= col < cols)
@@ -128,23 +132,46 @@ def _check_map(process: str, placed: dict[str, tuple[int, int]],
         if require_entry and set((0, col) for col in entry_columns(process)[bit]) \
                 != {pos for pos in positions if pos[0] == 0}:
             raise RuntimeError(f"Bit {bit} lacks the entry-row placement")
+    if require_entry:
+        empty_core = {(row, col) for row in range(rows)
+                      for col in (range(cols) if row == 0 else
+                                  tuple(range(8)) + tuple(range(9, cols)))} \
+                     - set(placed.values())
+        if empty_core != {(rows - 1, col) for col in (0, 1, 15, 16)}:
+            raise RuntimeError("Fan has an interior dummy or disconnected row")
 
 
 def dummy_sites(process: str, variant: str) -> set[tuple[int, int]]:
     if variant not in ("fan", "centroid"):
         raise ValueError("Choose fan or centroid")
     placed = fan_map(process) if variant == "fan" else centroid_map(process)
-    rows, cols = GRID[process]
+    rows, cols = (FAN_GRID if variant == "fan" else GRID)[process]
     return {(row, col) for row in range(-1, rows + 1)
-            for col in range(-1, cols + 1)} - set(placed.values())
+            for col in (range(-1, cols + 1) if variant == "centroid" or row <= 0
+                        else tuple(range(-1, 8)) + tuple(range(9, cols + 1)))} \
+           - set(placed.values())
+
+
+def site_x(process: str, variant: str, row: int, col: int,
+           pitch: float, origin: float = 0.0) -> float:
+    """Physical x coordinate; upper fan halves close the vacant center slot."""
+    if process not in GRID or variant not in ("fan", "centroid"):
+        raise ValueError("Choose a PDK and fan or centroid")
+    if variant == "fan" and row > 0:
+        if col == 8:
+            raise ValueError("Upper fan rows have no center site")
+        return origin + (col + 0.5 if col < 8 else col - 0.5) * pitch
+    return origin + col * pitch
 
 
 def text_map(process: str, variant: str) -> str:
     placed = fan_map(process) if variant == "fan" else centroid_map(process)
     cells = {pos: int(name.split("_")[1]) for name, pos in placed.items()}
-    rows, cols = GRID[process]
+    rows, cols = (FAN_GRID if variant == "fan" else GRID)[process]
     return "\n".join(" ".join(str(cells.get((row, col), "D"))
-                               for col in range(-1, cols + 1))
+                               for col in (range(-1, cols + 1)
+                                           if variant == "centroid" or row <= 0 else
+                                           tuple(range(-1, 8)) + tuple(range(9, cols + 1))))
                      for row in reversed(range(-1, rows + 1)))
 
 
@@ -158,21 +185,24 @@ def svg() -> str:
     for process_index, process in enumerate(("sky130", "gf180")):
         for variant_index, variant in enumerate(("fan", "centroid")):
             x0, y0 = 30 + variant_index * 730, 80 + process_index * 330
-            rows, cols = GRID[process]
+            rows, cols = (FAN_GRID if variant == "fan" else GRID)[process]
             mapping = fan_map(process) if variant == "fan" else centroid_map(process)
             cells = {pos: int(name.split("_")[1]) for name, pos in mapping.items()}
             label = f'{"SKY130A" if process == "sky130" else "GF180MCU D"} · {"edge fan" if variant == "fan" else "common centroid"} · {rows}×{cols} core'
             parts.append(f'<text x="{x0}" y="{y0}" class="title">{label}</text>')
             for row in range(-1, rows + 1):
-                for col in range(-1, cols + 1):
+                columns = (range(-1, cols + 1) if variant == "centroid" or row <= 0
+                           else tuple(range(-1, 8)) + tuple(range(9, cols + 1)))
+                for col in columns:
                     bit = cells.get((row, col))
-                    x, y = x0 + (col + 1) * 37, y0 + 18 + (rows - row) * 31
+                    x = site_x(process, variant, row, col, 37, x0 + 37)
+                    y = y0 + 18 + (rows - row) * 31
                     fill = COLORS[bit] if bit is not None else "#394357"
                     parts.append(f'<rect x="{x}" y="{y}" width="34" height="28" rx="3" fill="{fill}"/>')
                     parts.append(f'<text x="{x+17}" y="{y+14}" class="bit">{bit if bit is not None else "D"}</text>')
             if variant == "fan":
                 parts.append(f'<text x="{x0}" y="{y0+245}" class="small">bottom active row faces switches; MSB pair straddles center singleton</text>')
-    parts.append('<text x="30" y="720" class="small">Identical core footprint per PDK supports fair placement comparison. Base MIM sits outside. Dummy plates require explicit ground routes and LVS.</text>')
+    parts.append('<text x="30" y="720" class="small">Fan upper rows close the central slot; centroid retains its regular grid. Base MIM sits outside. Dummy plates require ground routes and LVS.</text>')
     parts.append("</svg>")
     return "\n".join(parts) + "\n"
 

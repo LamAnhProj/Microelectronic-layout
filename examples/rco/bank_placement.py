@@ -13,7 +13,8 @@ from pathlib import Path
 import platform
 import uuid
 
-from examples.rco.bank_floorplan import GRID, centroid_map, dummy_sites, entry_columns, fan_map
+from examples.rco.bank_floorplan import (FAN_GRID, GRID, centroid_map, dummy_sites,
+                                         entry_columns, fan_map, site_x)
 from examples.rco.generate_xschem import devices
 from examples.rco.place import number
 from examples.rco.run import CONFIG, PIN, ROOT
@@ -45,7 +46,7 @@ def placement(process: str, variant: str, corridor_probe: bool = False) -> tuple
         raise ValueError("Choose a PDK and fan or centroid")
     style = "balanced" if process == "gf180" else "binary"
     grid = fan_map(process) if variant == "fan" else centroid_map(process)
-    rows, cols = GRID[process]
+    rows, cols = (FAN_GRID if variant == "fan" else GRID)[process]
     entries = []
     lines = ["# One-stage RCO bank placement only; no electrical connections.",
              "proc rect {layer x1 y1 x2 y2} {",
@@ -57,7 +58,8 @@ def placement(process: str, variant: str, corridor_probe: bool = False) -> tuple
             continue
         if name.startswith("C0_"):
             row, col = grid[name]
-            x, y = X0_UM + col * PITCH_UM, Y0_UM + row * PITCH_UM
+            x, y = site_x(process, variant, row, col, PITCH_UM, X0_UM), \
+                   Y0_UM + row * PITCH_UM
         elif name == "CBASE0":
             x, y = X0_UM + cols * PITCH_UM + 35, Y0_UM
         elif name.startswith("MAIN0_"):
@@ -93,7 +95,8 @@ def placement(process: str, variant: str, corridor_probe: bool = False) -> tuple
     # Each site receives a real MIM PCell. Ground connections remain a routing task.
     for row, col in sorted(dummy_sites(process, variant)):
         name = f"DUMMY_{row+1}_{col+1}"
-        x, y = X0_UM + col * PITCH_UM, Y0_UM + row * PITCH_UM
+        x, y = site_x(process, variant, row, col, PITCH_UM, X0_UM), \
+               Y0_UM + row * PITCH_UM
         if process == "gf180":
             command = f"magic::gencell gf180mcu::cap_mim_2p0fF P{name} w 5 l 5"
         else:
@@ -120,7 +123,7 @@ def placement(process: str, variant: str, corridor_probe: bool = False) -> tuple
             raise RuntimeError("Corridor probe lacks planned plate clearance")
     expected = Counter({"cap": 78 if process == "sky130" else 62,
                         "nmos": 10, "pmos": 10,
-                        "dummy_cap": 56 if process == "sky130" else 72})
+                        "dummy_cap": len(dummy_sites(process, variant))})
     if Counter(entry["kind"] for entry in entries) != expected:
         raise RuntimeError("Unexpected bank placement population")
     lines += ["select top cell", "drc style drc(full)", "drc check", "drc catchup",
@@ -138,13 +141,15 @@ def write(process: str, variant: str, corridor_probe: bool = False) -> Path:
     if (platform.system(), platform.machine()) != ("Darwin", "arm64"):
         raise RuntimeError("Bank placement runs on the native arm64 Mac")
     entries, script = placement(process, variant, corridor_probe)
+    rows, cols = (FAN_GRID if variant == "fan" else GRID)[process]
     folder = ROOT / "runs" / "rco" / "bank_placement" / process / variant / str(uuid.uuid4())
     folder.mkdir(parents=True, mode=0o700)
     source = folder / "placement.tcl"
     source.write_text(script)
     manifest = {"status": "generated", "process": process, "variant": variant,
                 "bank_style": "balanced" if process == "gf180" else "binary",
-                "grid_rows_cols": GRID[process], "pitch_um_proposal": PITCH_UM,
+                "grid_rows_cols": [rows, cols], "pitch_um_proposal": PITCH_UM,
+                "fan_upper_rows": "16 sites shifted inward by half a pitch" if variant == "fan" else None,
                 "single_m4_wire_corridor_um": {"width": WIRE_WIDTH_UM,
                     "side_clearance_each": SIDE_CLEARANCE_UM,
                     "required_plate_gap": 2 * SIDE_CLEARANCE_UM + WIRE_WIDTH_UM},

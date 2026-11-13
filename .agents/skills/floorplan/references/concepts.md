@@ -149,3 +149,23 @@ plate edge needs a 4.5 µm channel. At 14.0 µm site pitch, saved unit PCells
 leave at least 6.01 µm SKY and 4.60 µm GF horizontal M4 gap. These are
 geometry calculations, not a routed-wire result. The source rules, physics,
 and validation state are in lab book FP-006.
+
+## FP-007 — Keep the fan active area compact
+
+**Source:** Engineer correction, 2026-11-12. No continuous line of dummy
+capacitors may split the fan. Active cells should occupy adjacent sites.
+Adjust fan rows and columns while preserving the mirrored bit populations
+and outer dummy ring.
+
+**Decision path:** If an odd singleton occupies the symmetry axis only in
+the entry row, do not reserve a center-column site in every upper row. Shift
+the two upper half-rows inward so their nearest active sites are one site
+pitch apart. Fill complete rows first; put any required internal dummies at
+mirrored *outer* ends of the far row. Check that no unexpected internal holes
+remain, then run PDK placement DRC. Do not merge or touch MIM plate polygons;
+the applicable PDK spacing still controls physical edge clearance.
+
+**Current RCO:** SKY fan has a 17-site entry row plus four 16-site upper
+rows; GF has the same entry row plus three upper rows. The centroid remains
+17×5 for comparison. See lab book FP-007 for the geometry and comparison
+caveat. Electrical benefit remains a PEX hypothesis.
