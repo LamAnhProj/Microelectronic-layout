@@ -420,6 +420,73 @@ M4 fan probes again passed both DRC engines, with 2.755 µm SKY and
 Dummy plates still require ground routes; connected DRC, LVS, PEX, and the
 bank delay comparison remain open.
 
+## 2026-11-12 — FP-009: Keep every bit in one connected MIM cluster
+
+**Engineer correction:** Unit capacitors of bit 8 must all touch as one
+group; likewise bit 7 and every smaller bit. Move bit 8 to the fan's outer
+edge so the other groups can pack together. Minimize avoidable routing gaps.
+This tightens the earlier requirement that *all* active sites be contiguous:
+each **individual bit** must now be edge-connected. Physical M4 plates
+retain their PDK spacing; “touch” here means adjacent capacitor sites.
+
+**Measured problem in FP-008:** In the previous fan, SKY bit groups 0, 1,
+5, 6, and 7 split into four to eight disconnected site islands. The GF
+fan likewise split most bits. In the exact centroid, the MSB alone split
+into six site islands. A no-hole active rectangle therefore did not satisfy
+the new routing constraint.
+
+**Conflict with exact common centroid:** A one-unit bit's geometric
+centroid lies at its grid-site center. The midpoint of two equal units
+that share an edge lies halfway between two site centers. On an unstaggered
+grid those centroids cannot coincide. SKY has a one-unit bit 3 and two-unit
+bits 2 and 4; GF has a one-unit bit 4 and two-unit bits 3 and 5. Thus
+"every bit edge-connected" and an **exact** common centroid of all nine
+bit groups cannot both hold with the current unit counts. The old exact
+interdigitated pattern remains in `bank-centroid-reference.svg` for
+comparison; it is not relabeled as a touching-group layout.
+
+**Agent fan proposal:** Use a four-row rectangular core. Allocate each
+bit a vertical stripe of `ceil(unit_count / 4)` columns, with a serpentine
+order through each full stripe. SKY needs 21 columns (`4×21 = 84` sites)
+for 77 active units; GF needs 17 (`4×17 = 68`) for 61. The seven unused
+sites in either core lie at the **outer left edge** above the partial
+one- and two-unit stripes, never between active groups. Bit 8 occupies
+the entire outer right block, with bit 7 and bit 6 alongside it. Every
+bit has its first schematic unit on the bottom, switch-facing row.
+The full dummy ring remains. The grid, same-bit connectivity, row
+continuity, and entry condition are checked in `bank_floorplan.py`.
+
+**Connected center-biased comparison:** The second main map uses the same
+core and unit counts, but moves bit 8 near the center while keeping each
+bit in one connected stripe. Its two-unit groups occupy rows 1–2, so
+their midpoint is near the bank's vertical center; its singleton occupies
+row 1. This is **not an exact common centroid** and is labeled as a
+clustered reference. It tests whether centering the large MSB block
+changes the extracted bank parasitics while preserving the new grouping
+rule. The exact centroid remains a third, separate teaching reference.
+On the 14.0 µm site grid, the MSB's horizontal site-center average moves
+from 91 µm to the right of the core center in the fan to 7 µm from center
+in the clustered reference (left for SKY, right for GF). This is placement
+geometry, not a measured capacitance or delay improvement.
+
+**Native Mac placement evidence:** The new SKY fan and clustered placement
+each contain 159 PDK instances (77 trim MIMs, one base MIM, 20 switch MOS,
+61 dummy MIMs). The GF equivalents each contain 135 (61 trim MIMs, one
+base, 20 MOS, 53 dummies). All four passed Magic and KLayout placement DRC
+with zero findings and zero measured offset from the 14.0 µm M4 plate-center
+grid. Fan bit-7/8 local M4 probes retained 2.755 µm SKY and 2.05 µm GF
+side clearance and passed both DRC engines. Saved runs are under
+`runs/rco/bank_placement/`: SKY fan `9479ac4e-848c-45df-87d1-bc0e3638624e`,
+SKY clustered `98ca53c8-2b7f-46a1-b62a-11e67f38172f`, GF fan
+`6d934442-bb96-433b-9759-3fadf49b137b`, and GF clustered
+`be3a453b-70aa-408b-867a-3957494a0c35`. The separate exact-centroid
+references also pass placement DRC (SKY `dd6c41b5-5a09-4417-9252-6f55145dd59f`,
+GF `dba88cfc-02c1-49df-b3de-c73a35892590`). These are **unrouted** layouts: dummy ground
+ties, net continuity, LVS, extracted R/C, and delay/frequency comparisons
+remain open. Use the [main comparison](../examples/rco/bank-floorplans.svg)
+and [exact centroid reference](../examples/rco/bank-centroid-reference.svg)
+to review the tradeoff.
+
 ## Entry format for each taught concept
 
 Record the engineer's statement in ordinary language first. Then add:

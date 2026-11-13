@@ -170,7 +170,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("process", choices=CONFIG)
-    parser.add_argument("variant", choices=("fan", "centroid"))
+    parser.add_argument("variant", choices=("fan", "clustered", "centroid"))
     parser.add_argument("--corridor-probe", action="store_true")
     args = parser.parse_args()
     print(json.dumps(validate(args.process, args.variant, args.corridor_probe), indent=2))

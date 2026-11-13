@@ -13,8 +13,10 @@ from pathlib import Path
 import platform
 import uuid
 
-from examples.rco.bank_floorplan import (GRID, centroid_map, dummy_sites,
-                                         entry_columns, fan_map, site_x)
+from examples.rco.bank_floorplan import (FAN_GRID, GRID, centroid_map,
+                                         clustered_map, clustered_stripes,
+                                         dummy_sites, entry_columns, fan_map,
+                                         site_x)
 from examples.rco.generate_xschem import devices
 from examples.rco.place import number
 from examples.rco.run import CONFIG, PIN, ROOT
@@ -48,13 +50,14 @@ def _body_contacts(lines: list[str], kind: str, x: float, y: float) -> None:
 
 
 def placement(process: str, variant: str, corridor_probe: bool = False) -> tuple[list[dict], str]:
-    if process not in CONFIG or variant not in ("fan", "centroid"):
-        raise ValueError("Choose a PDK and fan or centroid")
+    if process not in CONFIG or variant not in ("fan", "clustered", "centroid"):
+        raise ValueError("Choose a PDK and fan, clustered, or centroid")
     if corridor_probe and variant != "fan":
         raise ValueError("The bit-7/8 corridor probe belongs to the fan entry row")
     style = "balanced" if process == "gf180" else "binary"
-    grid = fan_map(process) if variant == "fan" else centroid_map(process)
-    rows, cols = GRID[process]
+    grid = (fan_map(process) if variant == "fan" else
+            clustered_map(process) if variant == "clustered" else centroid_map(process))
+    rows, cols = (FAN_GRID if variant in ("fan", "clustered") else GRID)[process]
     entries = []
     lines = ["# One-stage RCO bank placement only; no electrical connections.",
              "proc rect {layer x1 y1 x2 y2} {",
@@ -77,7 +80,9 @@ def placement(process: str, variant: str, corridor_probe: bool = False) -> tuple
             y = 30 if kind == "nmos" else 95
         else:
             bit = int(name.split("_")[1])
-            x = X0_UM + min(entry_columns(process)[bit]) * PITCH_UM
+            switch_col = (clustered_stripes(process)[bit][0] if variant == "clustered"
+                          else min(entry_columns(process)[bit]))
+            x = X0_UM + switch_col * PITCH_UM
             y = 30 if kind == "nmos" else 95
         if kind == "cap":
             if process == "gf180":
@@ -131,8 +136,8 @@ def placement(process: str, variant: str, corridor_probe: bool = False) -> tuple
         # Magic puts the PCell's lower-left geometry at its requested origin.
         # The measured M4 plate widths of the bit-7/8 units are below.
         plate_width = 7.99 if process == "sky130" else 9.40
-        gap_left = X0_UM + 6 * PITCH_UM + plate_width / 2
-        gap_right = X0_UM + 7 * PITCH_UM - plate_width / 2
+        gap_left = X0_UM + 12 * PITCH_UM + plate_width / 2
+        gap_right = X0_UM + 13 * PITCH_UM - plate_width / 2
         center_x = (gap_left + gap_right) / 2
         center_y = Y0_UM
         lines.append(f"rect metal4 {center_x-WIRE_WIDTH_UM/2} "
@@ -160,7 +165,7 @@ def write(process: str, variant: str, corridor_probe: bool = False) -> Path:
     if (platform.system(), platform.machine()) != ("Darwin", "arm64"):
         raise RuntimeError("Bank placement runs on the native arm64 Mac")
     entries, script = placement(process, variant, corridor_probe)
-    rows, cols = GRID[process]
+    rows, cols = (FAN_GRID if variant in ("fan", "clustered") else GRID)[process]
     folder = ROOT / "runs" / "rco" / "bank_placement" / process / variant / str(uuid.uuid4())
     folder.mkdir(parents=True, mode=0o700)
     source = folder / "placement.tcl"
@@ -189,7 +194,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("process", choices=CONFIG)
-    parser.add_argument("variant", choices=("fan", "centroid"))
+    parser.add_argument("variant", choices=("fan", "clustered", "centroid"))
     parser.add_argument("--corridor-probe", action="store_true")
     args = parser.parse_args()
     print(write(args.process, args.variant, args.corridor_probe))

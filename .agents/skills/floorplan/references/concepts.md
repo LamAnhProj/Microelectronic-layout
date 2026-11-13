@@ -197,3 +197,32 @@ active row and four 15-unit rows; GF has one 17-unit row and four 11-unit
 rows. The full row is at the switch edge for fan and in the middle for
 centroid. See lab book FP-008 for physical checks and remaining electrical
 work.
+
+## FP-009 — Group every bit into one connected capacitor block
+
+**Source:** Engineer correction, 2026-11-12. Units of bit 8 must all be
+adjacent to each other; apply this to every bit in both compared layouts.
+For the fan, move bit 8 to the outer edge and pack lower bits inward with
+short, gap-free routing paths. This supersedes the per-bit mirror requirement
+when it conflicts with one connected block. Keep the one-site dummy ring.
+
+**Physical interpretation:** A connected cluster offers a path through
+neighboring unit sites for a bit's local wiring. It does not prove low
+parasitic R/C, because switch location, topology, layer, width, and vias
+still matter. Check the actual schematic terminal order before tying any
+units together; some lower bits are series MIM networks.
+
+**Decision path:** Count actual units by bit. Give each bit one connected
+region, verify every unit is reachable from every other through side-adjacent
+sites, and give each fan bit a switch-facing entry. Put unavoidable vacant
+sites only at the outside edge. Place the MSB at the fan's outermost edge;
+compare a second connected arrangement with the MSB nearer the center.
+Run PDK placement DRC, then route and extract both before judging R/C.
+
+**Common-centroid limit:** One unit has its centroid at a grid site; two
+equal edge-adjacent units have a midpoint between sites. Because both counts
+occur in this bank, an exact common centroid of every bit is incompatible
+with one connected cluster per bit on the unstaggered grid. Label the second
+layout a connected, center-biased reference. Preserve the exact interdigitated
+centroid separately and do not present it as satisfying the engineer's new
+grouping rule. See lab book FP-009 for counts, geometry, and native checks.

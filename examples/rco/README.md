@@ -363,20 +363,24 @@ KLayout would diverge from the schematic and invalidate the recorded hashes.
 
 ### Isolated capacitor-bank comparison
 
-The [bank floorplan SVG](bank-floorplans.svg) shows one stage's edge fan and
-common-centroid proposals side by side for both PDKs. Every unit MIM M4
-plate **center** uses the same 14.0 µm column and row grid; there is no
-row staggering. PCell origins are offset by half the measured plate size so
-the different GF unit widths still share those centers. Both banks
-have five rows and 17 columns. The fan's switch-facing row is fully active;
-the common centroid's middle row is fully active. In each bank, four MSB
-cells occupy the center column of the other rows. The SKY active span is
-15 cells wide in those rows; GF is 11 cells wide. Active cells occupy
-contiguous sites without a dummy channel. Dummies fill only the outer
-columns and the one-site perimeter ring. Those plates are **intended** for
-ground but are not connected yet. The common-centroid layout has the same
-average M4 bottom-plate center for every bit group. Both variants use the same hierarchical
-schematic, so schematic waveforms are identical by variant.
+The [main bank comparison](bank-floorplans.svg) shows the edge fan and a
+center-biased grouped reference for both PDKs. Each bit's unit MIMs form
+**one edge-connected block**. The fan puts the whole MSB at the outer edge;
+every bit has a capacitor on the bottom switch-facing row. The reference
+puts the MSB near the bank center and its smallest bits near the outer
+edges. SKY uses a 4×21 core; GF uses 4×17. Seven unused core sites in each
+sit at the outer edge, with a one-site dummy ring around the bank. No dummy
+lies between active bit groups. Unit M4 plate centers stay on a uniform
+14.0 µm grid without row staggering, including the differing GF widths.
+
+The [exact common-centroid reference](bank-centroid-reference.svg) remains
+available for teaching. It necessarily separates some units of the same
+bit. A singleton's centroid is at a grid site; two edge-adjacent equal
+units have a midpoint between sites, so both groups cannot share an exact
+centroid. The center-biased grouped layout is **not** an exact common
+centroid. All three placements share one hierarchical schematic, so their
+schematic-level waveforms are identical. Dummy plates are **intended** for
+ground but are not connected yet.
 
 At 14.0 µm site pitch, the measured M4 bottom-plate shapes leave at least
 6.01 µm between SKY units and 4.60 µm between the widest GF units. A 0.5 µm
@@ -393,8 +397,10 @@ See lab-book FP-005 and FP-006 for rule sources and the spacing tradeoff.
 .venv/bin/python -m examples.rco.bank_block sky130 0
 .venv/bin/python -m examples.rco.bank_block gf180 1
 .venv/bin/python -m examples.rco.validate_bank_placement sky130 fan
+.venv/bin/python -m examples.rco.validate_bank_placement sky130 clustered
 .venv/bin/python -m examples.rco.validate_bank_placement sky130 centroid
 .venv/bin/python -m examples.rco.validate_bank_placement gf180 fan
+.venv/bin/python -m examples.rco.validate_bank_placement gf180 clustered
 .venv/bin/python -m examples.rco.validate_bank_placement gf180 centroid
 .venv/bin/python -m examples.rco.validate_bank_placement sky130 fan --corridor-probe
 .venv/bin/python -m examples.rco.validate_bank_placement gf180 fan --corridor-probe
