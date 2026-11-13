@@ -129,7 +129,7 @@ because the base MIM is much larger than a trim unit. SKY trim units use a
 plates are about 15.6–15.7 µm. Legal cell pitch, routing channels, edge
 dummies, and the true bank outline remain to be determined from the PDKs.
 
-**Rough pattern only; not unit-cell placement:**
+**Initial rough pattern, corrected by FP-004; not unit-cell placement:**
 
 ```text
 COMMON CENTROID                 EDGE-ANCHORED FAN (assumed inward spread)
@@ -177,6 +177,57 @@ delay after extraction.
 
 **Evidence and state:** This is an engineer-selected plan. No new GDS or
 post-layout R/C, DRC, LVS, or transient run has been made for the fan.
+
+## 2026-11-12 — FP-004: Common connection row within the fan
+
+**Engineer clarification:** As lower bits fan out, the capacitor that
+connects each bit branch is on the same row as the MSB. The fan describes
+where the rest of each bit's capacitance spreads; it does not move the
+electrical entry points of lower bits away from the MSB connection row.
+
+**Netlist mapping:** For each stage, `n<i>` reaches `bank<i>` through the
+master transmission gate. Each bit switch connects `bank<i>` to
+`cap<i>_<bit>`, the top node of that bit's MIM network. In a series chain,
+the first MIM touches `cap<i>_<bit>`; in a parallel bit, several MIMs touch
+that node. Thus the proposed common row holds the **bank-facing entry/tap
+region** of each bit, with its remaining unit cells fanning into the array.
+The MSB is many parallel units (32 SKY, 16 GF), so a literal single 9-site
+or 8-site row cannot hold every MSB bank-facing plate. A local top-plate
+spine along that row is an agent interpretation to examine, not yet an
+engineer-approved route.
+
+```text
+                         interior of one stage bank
+             lower-bit series/parallel units fan away
+                 ↖       ↑       ↗
+       ┌────────────────────────────────────────┐
+       │ bit entry/tap regions  | broad MSB area│
+       ├────────────────────────────────────────┤ ← common connection row
+       │  SW0  SW1  ...  SW7  | SW8 / MSB edge │
+       └────────────────────────────────────────┘
+                shared bank-side routing corridor
+```
+
+**Why this may help:** The first part of each selected branch is close to a
+defined row, making switch-to-cap routing more local and comparable. A
+distributed RC network has a first-order Elmore delay
+`t ≈ Σ R_segment × C_downstream`; resistance before a large downstream
+capacitance is especially consequential. A fixed stray capacitance is also
+a larger fraction of a small trim weight than of the MSB. For example,
+1 fF would be 20% of an ideal 5 fF LSB if it appeared directly in parallel
+at that branch node; this is an illustration, not a measured parasitic.
+The real switch, series-MIM, and coupling network must be extracted.
+
+**RCO consequence:** Added or unequal branch parasitics alter the effective
+selected capacitance and RC-node slew. That changes each inverter's input
+crossing time, stage-to-stage phase spacing, and potentially the ring period
+and duty cycle. The shared row is a routing hypothesis to test, not a
+guarantee of equal path resistance or capacitance. Layer, path length, vias,
+neighbors, and ground return still matter.
+
+**Open geometry:** Confirm whether the intended row is the bank-facing edge
+next to the bit switches and how the MSB's many parallel units join it.
+No layout, DRC, LVS, PEX, or new simulation was executed for FP-004.
 
 ## Entry format for each taught concept
 

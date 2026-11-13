@@ -91,3 +91,23 @@ extracted trim errors or phase imbalance motivate it.
 branch loading, edge slew, stage delay, and ring period. With average stage
 delays, `T ≈ 2Σt_stage`. The fan is a layout hypothesis until connected
 DRC/LVS, PEX, transient waveforms, and trim-code checks are available.
+
+## FP-004 — Align each bit's bank-facing capacitor region
+
+**Source:** Engineer clarification, 2026-11-12. The lower-bit capacitors
+fan away, while each bit's connecting capacitor or entry region stays on
+the same row as the MSB. Do not interpret the fan as moving the bit taps
+progressively farther from the shared bank-side row.
+
+**Netlist interpretation:** Each stage has `n<i> → MAIN<i> → bank<i> →
+SW<i>_<bit> → cap<i>_<bit> → MIM network → ground`. A series chain has one
+first MIM at the bit node; parallel branches can have several. The MSB
+contains 32 SKY or 16 GF parallel MIMs, so the final top-plate bus and
+exact tap assignment need a separate routing design.
+
+**Physical test:** Compare bit-entry path resistance, stray capacitance,
+Elmore delay contribution, RC-node slew, adjacent trim steps, and stage
+phase spacing in extracted layouts. A common geometric row does not imply
+equal parasitics without matched routing layers, path lengths, vias, and
+coupling environments. Keep this as a reviewed sketch until the engineer
+chooses the edge and detailed MSB connection.
