@@ -148,6 +148,36 @@ not drawn. The fan orientation, switch and RC-node locations, and whether the
 base MIM sits inside or beside the trim array need the engineer's decision.
 No GDS, DRC, LVS, or PEX was generated for these proposals.
 
+## 2026-11-12 — FP-003: Select the edge-anchored fan
+
+**Engineer selection:** Use the edge-anchored fan. Put the MSB region at the
+center of one bank edge and spread the successively lower bits inward. Keep
+the larger base capacitor outside the trim-unit grid near the RC node.
+Matching is a lower priority here than controlling the RC delay and the
+timing shifts caused by the trim-bank parasitics. This supersedes the
+common-centroid option for the first physical proposal; common centroid
+remains a comparison option if measured behavior later warrants it.
+
+**Agent interpretation:** The target is a predictable effective capacitance
+and transition time for each selected trim code. Wire and switch resistance
+and parasitic capacitance can change the RC-node slew `dV/dt`. If the three
+stages acquire different delays, their edges shift relative to one another;
+the ring period also changes. Using average stage delays, a first-order model
+is `T ≈ 2(t0 + t1 + t2)` and `f ≈ 1/T`. This explains the engineer's skew
+concern without claiming that the fan has already improved frequency or
+phase. A static trim word does not itself create a separate clock phase.
+
+**Current sketch decision:** Keep one 9 × 9 SKY trim grid or one 8 × 8 GF trim
+grid per stage as the count-based starting point. The MSB is a broad region
+of 32 SKY or 16 GF unit MIMs, not a single tile. Lower-bit regions fan inward.
+The exact unit allocation, edge orientation relative to the resistor and
+master switch, and route topology are still open. Matching is lower priority,
+not an unchecked property; inspect trim monotonicity and stage-to-stage
+delay after extraction.
+
+**Evidence and state:** This is an engineer-selected plan. No new GDS or
+post-layout R/C, DRC, LVS, or transient run has been made for the fan.
+
 ## Entry format for each taught concept
 
 Record the engineer's statement in ordinary language first. Then add:

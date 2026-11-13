@@ -60,9 +60,8 @@ transient checks exist.
 
 **Candidates taught by the engineer:** Common-centroid capacitor placement,
 or a fan with the MSB centered at one square edge and successive bits
-spreading from it. These are alternatives to sketch and compare, not a
-selected implementation. The fan direction and detailed unit assignment
-remain open.
+spreading from it. The engineer selected the edge-anchored fan in FP-003;
+the detailed unit assignment remains open.
 
 **Decision path:** Count actual MIM instances per bit and stage. Estimate
 square or rectangular array dimensions for each separate stage bank. Keep
@@ -73,3 +72,22 @@ monotonicity, waveform slew, and post-layout frequency before preferring one.
 
 **Current counts and sketches:** See `knowledge/lab-book.md`, FP-002. No
 physical layout change has been authorized for this teaching step.
+
+## FP-003 — Use an edge-anchored fan for the first RCO bank proposal
+
+**Source:** Engineer selection, 2026-11-12. Place the broad MSB region at
+the middle of one bank edge and fan lower bits inward. Keep the larger base
+MIM outside the trim grid near the RC node. Prioritize controlled RC delay
+and trim behavior over common-centroid matching for this first proposal.
+
+**Decision path:** Start with one bank per stage: 9 × 9 unit sites for SKY
+or 8 × 8 for GF as a count-only sketch. Orient and assign bit regions only
+after the engineer specifies which edge faces the resistor, switch, and
+RC node. Preserve room for legal spacing and routing; do not treat open
+sites as approved dummy cells. Keep common centroid as a comparison if
+extracted trim errors or phase imbalance motivate it.
+
+**Physics and test:** `i_C = C dV/dt`; parasitic R/C can change selected
+branch loading, edge slew, stage delay, and ring period. With average stage
+delays, `T ≈ 2Σt_stage`. The fan is a layout hypothesis until connected
+DRC/LVS, PEX, transient waveforms, and trim-code checks are available.
