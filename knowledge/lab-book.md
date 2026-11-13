@@ -31,6 +31,58 @@ workspaces in a fresh session. The engineer can invoke it as `$floorplan`.
 **Next observation:** no instructor placement rule has been recorded yet. Begin
 with the first placement choice and its physical reason.
 
+## 2026-11-12 — FP-001: Shape and area before placement
+
+**Engineer guidance:** Start a real die with its shape and area. Assess signal
+flow and the large circuit components. In this free-rein RCO, aim for the best
+post-layout performance against the specifications. Make the block easy to
+place at top-chip level, ideally square or with orthogonal protrusions.
+
+**Agent interpretation:** Treat the outline as an integration and routing
+constraint, and post-layout circuit measurements as the performance test. A
+square bounding box is a candidate shape, not proof that wire parasitics or
+frequency are optimal. The engineer has not yet specified a die boundary,
+area limit, neighboring blocks, pin edge, or ranking among power, area, trim
+resolution, and frequency error. The existing RCO construction targets include
+512 kHz within ±1% after trim at nominal conditions, 45–55% duty as an aim,
+and a buffered output swing into the modeled 1 pF load; these remain to be
+checked after routing and extraction.
+
+**Current signal flow:** Three inverter → resistor → RC-input stages form a
+closed ring. Each RC input has a base capacitor and a nine-bit selected bank;
+one control word and a master switch control the three banks. Control
+restoration or level shifting feeds the switches. Two output inverters buffer
+the ring. Major physical groups are the three long resistors, three capacitor
+banks, ring MOS devices and switches, control circuits, and output buffers.
+The placements contain 130 MOS devices and three resistors each, plus 234 SKY
+or 186 GF MIM capacitors. See `examples/rco/README.md` for the source topology.
+
+**Measured placement extent:** The table uses each saved GDS report's drawn
+geometry bounding box; it is not a reserved block outline or routed footprint.
+
+| Open PDK | Saved placement run | GDS bbox (µm) | Width × height (µm) | Bbox area (mm²) | Aspect | Placement DRC |
+| --- | --- | --- | --- | ---: | ---: | --- |
+| SKY130A | `7043cefd-a48b-4520-a828-baa9b2fae902` | `(34.79, 24.79)–(1041.10, 1032.215)` | `1006.310 × 1007.425` | 1.0138 | 1.0011 | 0 Magic / 0 KLayout items |
+| GF180MCU D | `f78e0a3b-c334-47cf-b6d6-b1144a8208c5` | `(34.70, 24.70)–(1042.40, 1032.30)` | `1007.700 × 1007.600` | 1.0154 | 1.0001 | 0 Magic / 0 KLayout items |
+
+The corresponding GDS SHA256 values are
+`8be4dffbd0c539618c9f0e2c7ac0bf36a178bf7f2f3e225a567991895b0913e1`
+and
+`252534423cdd6bf92f837cafeb6e3ccfd6b80f1870566f4ffc6d30d2c322e83a`.
+Both reports use Volare PDK pin
+`c6d73a35f524070e85faff4a6a9eef49553ebc2b` on the arm64 Mac.
+
+**Assessment:** The current bounding boxes are square-like, but the generated
+placement puts capacitor origins in a lower band and MOS origins in an upper
+band. It was made to check PDK PCell population and placement DRC, without
+connected routing. No top-level integration outline, routed area, LVS, PEX,
+or post-layout frequency has been measured for this RCO. Its present shape
+does not establish the engineer's performance goal.
+
+**Next decision to learn:** How should the RCO's signal flow and major blocks
+be arranged within that shape before routing? Record the engineer's reason,
+then compare a candidate arrangement with this baseline.
+
 ## Entry format for each taught concept
 
 Record the engineer's statement in ordinary language first. Then add:

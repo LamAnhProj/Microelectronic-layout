@@ -5,7 +5,7 @@ description: Floorplan analog or mixed-signal circuits before detailed layout. U
 
 # Floorplanning with the engineer
 
-Turn the engineer's step-by-step method into a reviewable floorplan. Annotate each session in `knowledge/lab-book.md` before distilling a reusable rule. Keep the entry point short: when the engineer teaches a reusable concept, put its definition, physical cause, applicable conditions, exceptions, and observable test in `references/concepts.md` (create that file when the first concept is supplied). Link a process-specific reference only when that process actually needs different guidance. Do not promote an agent proposal to an engineer-taught rule.
+Turn the engineer's step-by-step method into a reviewable floorplan. Annotate each session in `knowledge/lab-book.md` before distilling a reusable rule. Read [taught concepts](references/concepts.md) when applying an engineer-taught principle; each entry gives its physical cause, conditions, exceptions, and observable test. Link a process-specific reference only when that process actually needs different guidance. Do not promote an agent proposal to an engineer-taught rule.
 
 ## Decision path
 
