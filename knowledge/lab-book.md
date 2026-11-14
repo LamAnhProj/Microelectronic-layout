@@ -588,6 +588,31 @@ compare candidate placements under the same electrical bench. Only after
 hierarchical integration can a trim-code transient sweep test oscillator
 frequency, phase, and process-corner behavior.
 
+## 2026-11-14 · Graph representations and measurable learning
+
+The engineer asked us to study GNNs, CNNs, trees, graph search, spatial
+indexes, and Big O before automating more floorplans. The working research
+and decision flow are in [graph-layout-research.md](graph-layout-research.md).
+This entry records an **agent research proposal and measured logical-map
+probe**, not a new engineer-taught placement rule.
+
+The first probe reads the saved schematic device order and all four historical
+fan drawings. A graph connectivity check found eight split bit groups in
+each first fan, seven in each uniform-grid fan, and zero in each current
+grouped fan. The compact intermediate fan introduced a staggered x grid.
+For the selected four-MIM series branch, the current fan and connected
+centered proposals have a 42 µm center-to-center Manhattan lower bound;
+the exact-centroid reference has 504 µm for that same electrical sequence.
+This comparison establishes **geometric route pressure only**. Neither
+proposal is electrically ranked until each has legal routed GDS, LVS, PEX,
+and the same simulation bench. The native-Mac timings and source hashes are
+saved in [representation-probe-2026-11-14.json](representation-probe-2026-11-14.json).
+
+The correction history is human-guided and retrospective. We will measure
+future decision quality with a fixed rubric and keep every rejected candidate
+and reason. A learned GNN/CNN model has not been trained; the available RCO
+routed data are too limited to estimate its prediction accuracy honestly.
+
 ## Entry format for each taught concept
 
 Record the engineer's statement in ordinary language first. Then add:

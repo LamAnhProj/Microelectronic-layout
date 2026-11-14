@@ -1,0 +1,322 @@
+{
+  "host": {
+    "system": "Darwin",
+    "machine": "arm64"
+  },
+  "source_sha256": "0aeec31147ae1928b373c33ba070ecf8640c5e65ef3a028f09b9ba451a96b8da",
+  "floorplan_data_sha256": "84da30c0e1028dfd30b386f24b8ae2c6c4bb68dea1b86f59fb6d44b283fabca2",
+  "scope": "Logical SVG site connectivity and Manhattan lower bounds; no routing or PEX",
+  "fan_revision_history": [
+    {
+      "revision": "01-original-mirrored.svg",
+      "process": "sky130",
+      "active_units": 77,
+      "split_bits": 8,
+      "extra_components": 24,
+      "staggered_x": false,
+      "components_by_bit": {
+        "0": 4,
+        "1": 4,
+        "2": 2,
+        "3": 1,
+        "4": 2,
+        "5": 4,
+        "6": 8,
+        "7": 6,
+        "8": 2
+      }
+    },
+    {
+      "revision": "01-original-mirrored.svg",
+      "process": "gf180",
+      "active_units": 61,
+      "split_bits": 8,
+      "extra_components": 18,
+      "staggered_x": false,
+      "components_by_bit": {
+        "0": 4,
+        "1": 2,
+        "2": 2,
+        "3": 2,
+        "4": 1,
+        "5": 2,
+        "6": 4,
+        "7": 8,
+        "8": 2
+      }
+    },
+    {
+      "revision": "02-compact-no-center-dummies.svg",
+      "process": "sky130",
+      "active_units": 77,
+      "split_bits": 8,
+      "extra_components": 27,
+      "staggered_x": true,
+      "components_by_bit": {
+        "0": 6,
+        "1": 4,
+        "2": 2,
+        "3": 1,
+        "4": 2,
+        "5": 4,
+        "6": 8,
+        "7": 6,
+        "8": 3
+      }
+    },
+    {
+      "revision": "02-compact-no-center-dummies.svg",
+      "process": "gf180",
+      "active_units": 61,
+      "split_bits": 8,
+      "extra_components": 25,
+      "staggered_x": true,
+      "components_by_bit": {
+        "0": 6,
+        "1": 4,
+        "2": 4,
+        "3": 2,
+        "4": 1,
+        "5": 2,
+        "6": 4,
+        "7": 8,
+        "8": 3
+      }
+    },
+    {
+      "revision": "03-uniform-grid.svg",
+      "process": "sky130",
+      "active_units": 77,
+      "split_bits": 7,
+      "extra_components": 25,
+      "staggered_x": false,
+      "components_by_bit": {
+        "0": 4,
+        "1": 4,
+        "2": 2,
+        "3": 1,
+        "4": 2,
+        "5": 4,
+        "6": 8,
+        "7": 8,
+        "8": 1
+      }
+    },
+    {
+      "revision": "03-uniform-grid.svg",
+      "process": "gf180",
+      "active_units": 61,
+      "split_bits": 7,
+      "extra_components": 21,
+      "staggered_x": false,
+      "components_by_bit": {
+        "0": 4,
+        "1": 4,
+        "2": 4,
+        "3": 2,
+        "4": 1,
+        "5": 2,
+        "6": 4,
+        "7": 8,
+        "8": 1
+      }
+    },
+    {
+      "revision": "04-grouped-current.svg",
+      "process": "sky130",
+      "active_units": 77,
+      "split_bits": 0,
+      "extra_components": 0,
+      "staggered_x": false,
+      "components_by_bit": {
+        "0": 1,
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1,
+        "5": 1,
+        "6": 1,
+        "7": 1,
+        "8": 1
+      }
+    },
+    {
+      "revision": "04-grouped-current.svg",
+      "process": "gf180",
+      "active_units": 61,
+      "split_bits": 0,
+      "extra_components": 0,
+      "staggered_x": false,
+      "components_by_bit": {
+        "0": 1,
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1,
+        "5": 1,
+        "6": 1,
+        "7": 1,
+        "8": 1
+      }
+    }
+  ],
+  "four_mim_series_chains": [
+    {
+      "process": "sky130",
+      "variant": "fan",
+      "bit": 1,
+      "sites_in_electrical_order": [
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          3
+        ]
+      ],
+      "manhattan_hops": 3,
+      "center_distance_lower_bound_um": 42.0
+    },
+    {
+      "process": "sky130",
+      "variant": "clustered",
+      "bit": 1,
+      "sites_in_electrical_order": [
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          3
+        ]
+      ],
+      "manhattan_hops": 3,
+      "center_distance_lower_bound_um": 42.0
+    },
+    {
+      "process": "sky130",
+      "variant": "centroid",
+      "bit": 1,
+      "sites_in_electrical_order": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          13
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          15
+        ]
+      ],
+      "manhattan_hops": 36,
+      "center_distance_lower_bound_um": 504.0
+    },
+    {
+      "process": "gf180",
+      "variant": "fan",
+      "bit": 2,
+      "sites_in_electrical_order": [
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          3
+        ]
+      ],
+      "manhattan_hops": 3,
+      "center_distance_lower_bound_um": 42.0
+    },
+    {
+      "process": "gf180",
+      "variant": "clustered",
+      "bit": 2,
+      "sites_in_electrical_order": [
+        [
+          0,
+          14
+        ],
+        [
+          1,
+          14
+        ],
+        [
+          2,
+          14
+        ],
+        [
+          3,
+          14
+        ]
+      ],
+      "manhattan_hops": 3,
+      "center_distance_lower_bound_um": 42.0
+    },
+    {
+      "process": "gf180",
+      "variant": "centroid",
+      "bit": 2,
+      "sites_in_electrical_order": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          13
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          15
+        ]
+      ],
+      "manhattan_hops": 36,
+      "center_distance_lower_bound_um": 504.0
+    }
+  ],
+  "connectivity_benchmark": {
+    "panels": 8,
+    "repetitions_per_sample": 200,
+    "median_ms_per_panel_pairwise": 0.0526,
+    "median_ms_per_panel_hash": 0.0366,
+    "meaning": "Python microbenchmark on small saved panels; not GNN/CNN training or full routing"
+  }
+}
