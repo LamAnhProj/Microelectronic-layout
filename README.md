@@ -52,6 +52,8 @@ See [macOS setup](docs/setup-macos.md), [architecture](docs/architecture.md),
 [R2 storage](docs/storage-r2.md), and [learning plan](docs/learning-plan.md).
 Use the [bridge guide](docs/bridge.md) and [agent workflow](docs/agent-workflow.md)
 for the working editor connection and circuit runner.
+The [Codex desktop shortcuts](docs/codex-desktop-shortcuts.md) record how to
+reopen a closed side-chat tab on this Mac.
 
 ## First SKY130A circuit
 
