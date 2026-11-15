@@ -290,6 +290,13 @@ placement with the original, using actual extracted R/C and waveforms.
 
 ### First-year circuit reading guide
 
+For annotated pictures of the extracted-network notation, the inverter
+threshold crossing, phase, and trim steps, open the
+[illustrated waveform lesson](../../knowledge/rco-waveform-lesson.md) or
+<http://127.0.0.1:8765/rco-lesson/> in Chip Lab. The figures keep the
+four-MIM coupon PEX, saved RCO schematic waveforms, and teaching model
+separate.
+
 An RC node changes voltage because the capacitor stores charge, `Q = C V`.
 Its current is `I_C = C dV/dt`; the resistor limits the charge rate. For an
 ideal resistor charging a capacitor from zero toward a step at `VDD`, the

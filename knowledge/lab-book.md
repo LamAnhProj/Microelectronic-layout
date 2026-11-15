@@ -559,7 +559,13 @@ delay or a 512 kHz frequency result.
 | Schematic AC C at 512 kHz | 10.863 fF | 19.340 fF |
 | Cap PEX AC C / step delay | 12.496 fF / 4.071 ns | 20.436 fF / 6.657 ns |
 | Flattened R-C extraction AC C / step delay | 12.289 fF / 4.003 ns | 20.363 fF / 6.634 ns |
-| Resolved extracted resistors / coupling caps | 0 / 7 | 1 / 11 |
+| Resolved extracted resistors / extracted C entries | 0 / 7 | 1 / 11 |
+
+**Count correction (2026-11-14):** The original coupon report key calls every
+extracted `C` line a “coupling capacitor.” In the GF netlist, the eleven
+lines include five nonzero inter-node capacitors, three nonzero capacitors
+to ground, and three zero-value entries. The count must not be read as
+eleven independently switching aggressor couplings.
 
 The schematic delays were 3.539 ns SKY and 6.300 ns GF. Both PEX benches
 rose as predicted, by 0.532 ns and 0.357 ns. The cap-only and flattened R-C
@@ -706,7 +712,36 @@ geometry, a binary heap for A*/Dijkstra route search, and a 2D difference
 array when many RUDY bounding boxes must update a large map. None of these
 alone establishes legal routing or extracted timing.
 
+## 2026-11-14 · Teaching RC extraction and oscillator waveforms
+
+**Engineer request:** Show pictures that teach where extracted resistance and
+coupling capacitance appear, when the RC node crosses the inverter threshold,
+and how frequency, phase, and trim steps change.
+
+**Evidence used:** The GF180MCU D four-MIM coupon has a passed native Mac
+extraction with one resolved ground-return resistor and eleven capacitor
+entries, classified above. It is isolated from the full RCO. A saved SKY130A code-154
+Xschem/ngspice nominal schematic waveform gives 511.305 kHz. A fresh DC
+sweep of the same INV1 MOS pair measured `Vout=Vin` at 0.868752 V; RC0's
+rising waveform crosses that static reference at 68.867500 µs. RC0 to RC2
+same-polarity crossings are 0.651987 µs apart, or 120.01° of the
+1.955778 µs clock period. A complete native Mac GF180 balanced-bank
+schematic sweep supplies the example trim steps. No full RCO PEX exists.
+
+**Agent teaching model:** A separate lumped 470 kΩ / 1.00 pF RC example
+crosses half supply in 326 ns. Adding illustrative wire resistance and
+coupling shifts the crossing later. These numbers are predictions to explain
+direction, not measurements of the RCO layout. The observed unequal GF
+code steps already occur in schematic simulation, so layout cannot yet be
+named their cause.
+
+The illustrated [lesson](rco-waveform-lesson.md), source-checking
+`examples/rco/waveform_lesson.py` script, and three figures are available
+through Chip Lab at `/rco-lesson/`. The separate numerical report is
+`knowledge/rco-waveform-lesson-data.json`.
+
 ## Entry format for each taught concept
+
 
 
 

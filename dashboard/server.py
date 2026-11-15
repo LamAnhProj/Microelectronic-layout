@@ -43,10 +43,12 @@ VISIBLE_FLOORPLAN_SOURCES = {
     "concepts": ".agents/skills/floorplan/references/concepts.md",
     "feature-builder": "examples/rco/full_bank_features.py",
     "coordinate-probe": "examples/rco/representation_probe.py",
+    "waveform-lesson": "examples/rco/waveform_lesson.py",
     "placement-builder": "examples/rco/bank_placement.py",
     "floorplan-rules": "examples/rco/bank_floorplan.py",
     "schematic-builder": "examples/rco/generate_xschem.py",
     "lab-book": "knowledge/lab-book.md",
+    "waveform-lesson-notes": "knowledge/rco-waveform-lesson.md",
 }
 TOKEN = secrets.token_urlsafe(32)
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -83,6 +85,7 @@ LVS_VARIANTS = {
 COORDINATE = re.compile(r"(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)")
 DOCS = [
     "knowledge/lab-book.md",
+    "knowledge/rco-waveform-lesson.md",
     "README.md", "dashboard/README.md", "docs/gui-workflow.md", "docs/validation.md",
     "docs/setup-macos.md", "docs/pdks-and-data.md",
     "docs/architecture.md", "docs/bridge.md", "docs/agent-workflow.md",
@@ -1563,6 +1566,20 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def serve_lesson_figure(self, name: str) -> None:
+        allowed = {"rco-lesson-1-extracted-network.png",
+                   "rco-lesson-2-threshold-waveform.png",
+                   "rco-lesson-3-behavior-and-trim.png"}
+        if name not in allowed:
+            raise ValueError("Unknown waveform lesson figure")
+        body = (ROOT / "knowledge" / "figures" / name).read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(body)
+
     def serve_schematic_svg(self, process: str) -> None:
         schematic_data(process)
         body = (RUNS / "dashboard" / "xschem" / process / "inverter.svg").read_bytes()
@@ -1605,6 +1622,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.serve_static("style.css", "text/css; charset=utf-8")
             if parsed.path in {"/floorplans", "/floorplans/"}:
                 return self.serve_static("floorplans.html", "text/html; charset=utf-8")
+            if parsed.path in {"/rco-lesson", "/rco-lesson/"}:
+                return self.serve_static("rco-lesson.html", "text/html; charset=utf-8")
+            if parsed.path == "/rco-lesson.css":
+                return self.serve_static("rco-lesson.css", "text/css; charset=utf-8")
+            if parsed.path.startswith("/rco-lesson/figures/"):
+                return self.serve_lesson_figure(parsed.path.rsplit("/", 1)[1])
             if parsed.path == "/floorplans.css":
                 return self.serve_static("floorplans.css", "text/css; charset=utf-8")
             if parsed.path == "/floorplans.js":

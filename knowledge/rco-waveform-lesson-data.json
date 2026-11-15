@@ -1,0 +1,76 @@
+{
+  "scope": "Teaching lesson; saved SKY/GF nominal schematic data, GF isolated coupon PEX, and explicit RC toy model. No full RCO layout PEX.",
+  "host": {
+    "system": "Darwin",
+    "arch": "arm64"
+  },
+  "builder_sha256": "4d9138584d71ecab9eb480edbe89befb5c311299b2d68b537b713cd8d7031be9",
+  "plotting": {
+    "matplotlib": "3.11.2",
+    "runtime": "uv --no-project temporary plotting environment"
+  },
+  "sources": {
+    "sky_run": "e92a209b-9c13-40fc-85b3-df4c55c60c7c",
+    "sky_waveform_sha256": "f0cd0287207b5ff35d2f99b0de54b318c88bbfc95f399399f12482c021edc533",
+    "gf_coupon_run": "c0f4b133-ff92-4352-899b-269b7e90c866",
+    "gf_coupon_rcx_sha256": "7de0d6f8064e12853fd33e1aba6d7cf0bd6d6d7d9fd8bbddb1d1e708aabe49e9",
+    "gf_sweep_run": "9ca5bc14-7bc1-47ae-953c-ab3863046d13",
+    "vtc_deck_sha256": "9804ff5ee4c1acd6e0b11f908daa0152c03ea7e124a850dbe950e6a743e72331"
+  },
+  "coupon_capacitor_entries": {
+    "inter_node_nonzero": 5,
+    "ground_nonzero": 3,
+    "zero_value": 3
+  },
+  "observed": {
+    "dc_trip_v": 0.8687521053328816,
+    "rc0_rise_crossing_us": 68.86750008242507,
+    "rc1_fall_crossing_us": 69.20867010150539,
+    "rc2_rise_crossing_us": 69.5194866315654,
+    "clock_rise_us": 69.2122855193393,
+    "next_clock_rise_us": 71.16806396284794,
+    "rc0_to_rc1_ns": 341.17001908031904,
+    "rc0_to_rc2_ns": 651.9865491403315,
+    "rc0_to_rc2_phase_deg": 120.01113311378197,
+    "clock_period_us": 1.9557781982442164,
+    "clock_frequency_hz": 511305.42353818123
+  },
+  "behavior": {
+    "model": [
+      {
+        "label": "Base: 470 k\u03a9, 1.00 pF",
+        "crossing_ns": 325.77917486317426,
+        "toy_frequency_khz": 511.59398613083806
+      },
+      {
+        "label": "Quiet neighbor: 475 k\u03a9, 1.05 pF",
+        "crossing_ns": 345.7071563042727,
+        "toy_frequency_khz": 482.10360597793266
+      },
+      {
+        "label": "Opposite edge: 475 k\u03a9, 1.10 pF",
+        "crossing_ns": 362.1694018425714,
+        "toy_frequency_khz": 460.18980570620846
+      }
+    ],
+    "gf_code_116_hz": 514590.2772011662,
+    "gf_code_117_hz": 511489.5564384128,
+    "gf_code_118_hz": 510192.9546659238,
+    "gf_delta_116_to_117_hz": -3100.7207627533935,
+    "gf_delta_117_to_118_hz": -1296.6017724890262
+  },
+  "figures": [
+    {
+      "path": "knowledge/figures/rco-lesson-1-extracted-network.png",
+      "sha256": "97b4c6fff162e6feb6d07ac0489b77fee359dc1c5df505a9436e8724af946094"
+    },
+    {
+      "path": "knowledge/figures/rco-lesson-2-threshold-waveform.png",
+      "sha256": "3d33ea8d8fde4ab7349e478840ce482e74743a694ac857111f14cfdc632a3090"
+    },
+    {
+      "path": "knowledge/figures/rco-lesson-3-behavior-and-trim.png",
+      "sha256": "1d431101083134d7be513822a2d44f05728fd260d6b1e32289269e5e0267fd66"
+    }
+  ]
+}
