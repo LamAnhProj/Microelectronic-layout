@@ -42,6 +42,7 @@ VISIBLE_FLOORPLAN_SOURCES = {
     "skill": ".agents/skills/floorplan/SKILL.md",
     "concepts": ".agents/skills/floorplan/references/concepts.md",
     "feature-builder": "examples/rco/full_bank_features.py",
+    "coordinate-probe": "examples/rco/representation_probe.py",
     "placement-builder": "examples/rco/bank_placement.py",
     "floorplan-rules": "examples/rco/bank_floorplan.py",
     "schematic-builder": "examples/rco/generate_xschem.py",

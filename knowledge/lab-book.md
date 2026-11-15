@@ -668,7 +668,46 @@ evaluated from these placement-only labels.
 candidate ranking, formula, Mac runtime, and an allowlisted read-only source
 viewer for the floorplan skill, taught concepts, lab book, and scripts.
 
+## 2026-11-14 · Timing and coordinate-neighbor teaching note
+
+**Agent explanation, not a new engineer-taught placement rule.** The saved
+full-bank screening report recorded 12.638 ms for six candidates on the native
+Darwin arm64 Mac. `examples/rco/full_bank_features.py` starts a monotonic
+`perf_counter_ns()` clock before analyzing the candidates and divides elapsed
+nanoseconds by one million. The batch figure includes reading and hashing the
+existing Mac placement artifacts, validating populations, building the
+device/net graphs, making the pin-density and RUDY proxy maps, and ranking.
+It does **not** include creating the earlier GDS or running Magic/KLayout DRC,
+LVS, PEX, ngspice, or writing the JSON report. A fresh no-write computation
+took 12.214 ms, showing ordinary run-to-run variation. These values measure
+Python computation time, not circuit delay.
+
+The separate `examples/rco/representation_probe.py` microbenchmark checks
+connected bit groups in the saved logical teaching grids. Five samples each
+repeat 200 evaluations per panel across eight panels; it reports the median
+milliseconds per panel. On a fresh Mac run, four-neighbor hash lookup was
+0.0364 ms/panel and scanning remaining sites was 0.0590 ms/panel. Both
+methods agreed on the resulting connected-component counts. This small
+benchmark does not establish scaling for a routed bank.
+
+For an integer-grid MIM at `(row, col)`, its four edge neighbors are
+`(row-1,col)`, `(row+1,col)`, `(row,col-1)`, and `(row,col+1)`; diagonal
+sites do not count. Store occupied coordinates as tuple keys in a set or
+dictionary. Four hash-membership probes per site give expected O(n) total
+time for an entire connectivity search. The pairwise-scan reference instead
+iterates over the remaining sites for each expansion, taking O(n²) time in
+the worst case. The full-bank feature builder uses only down and right
+lookups to emit each undirected adjacent pair once.
+
+Useful next data structures include a 2D grid for tile features, a
+device/net adjacency list for circuit topology, union-find for repeated
+connectivity checks as placements are added, a spatial index for arbitrary
+geometry, a binary heap for A*/Dijkstra route search, and a 2D difference
+array when many RUDY bounding boxes must update a large map. None of these
+alone establishes legal routing or extracted timing.
+
 ## Entry format for each taught concept
+
 
 
 Record the engineer's statement in ordinary language first. Then add:
