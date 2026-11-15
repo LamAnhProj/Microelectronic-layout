@@ -38,6 +38,15 @@ ROOT = Path(__file__).resolve().parents[1]
 STATIC = Path(__file__).resolve().parent / "static"
 RUNS = ROOT / "runs"
 PDK_ROOT = ROOT / "pdks" / "volare"
+VISIBLE_FLOORPLAN_SOURCES = {
+    "skill": ".agents/skills/floorplan/SKILL.md",
+    "concepts": ".agents/skills/floorplan/references/concepts.md",
+    "feature-builder": "examples/rco/full_bank_features.py",
+    "placement-builder": "examples/rco/bank_placement.py",
+    "floorplan-rules": "examples/rco/bank_floorplan.py",
+    "schematic-builder": "examples/rco/generate_xschem.py",
+    "lab-book": "knowledge/lab-book.md",
+}
 TOKEN = secrets.token_urlsafe(32)
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 PROCESSES = {
@@ -1601,6 +1610,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.serve_static("floorplans.js", "text/javascript; charset=utf-8")
             if parsed.path == "/floorplan-data.json":
                 return self.serve_static("floorplan-data.json", "application/json; charset=utf-8")
+            if parsed.path == "/full-bank-analysis.json":
+                return self.serve_static("full-bank-analysis.json", "application/json; charset=utf-8")
             if parsed.path.startswith("/floorplans/"):
                 return self.serve_floorplan_svg(parsed.path.removeprefix("/floorplans/"))
             if parsed.path == "/api/overview":
@@ -1615,6 +1626,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, rco_four_mim_data(q["process"]))
             if parsed.path == "/api/rco-full-fan":
                 return self.reply(200, rco_full_fan_data(q["process"]))
+            if parsed.path == "/api/floorplan-source":
+                name = q.get("name", "")
+                if name not in VISIBLE_FLOORPLAN_SOURCES:
+                    raise ValueError("Unknown floorplan source")
+                path = ROOT / VISIBLE_FLOORPLAN_SOURCES[name]
+                return self.reply(200, {"name": name, "path": str(path.relative_to(ROOT)),
+                                        "sha256": digest(path), "text": path.read_text()})
             if parsed.path == "/api/artifact":
                 return self.reply(200, {"name": q["name"], "text":
                     artifact_text(q["process"], q["run"], q["name"])})

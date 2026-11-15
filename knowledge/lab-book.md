@@ -633,7 +633,43 @@ GNN actually evaluated, what their code/data provide, and how a future RCO
 experiment should differ. These workflow changes are an engineer direction;
 model performance on this analog bank remains an untested agent hypothesis.
 
+## 2026-11-14 · Full-bank graph and fast placement screening
+
+**Engineer direction:** Work on the full nine-bit bank as a unit, show the
+runtime and method used at each step, and expose the actual skill and scripts
+in Chip Lab. Keep the stage of work visible.
+
+**Executed on the native arm64 Mac:** `python3 -m examples.rco.full_bank_features`
+read the six saved, hash-verified, placement-DRC-clear one-stage GDS runs:
+fan, centered grouped, and exact-centroid reference for each open PDK. It
+created a device/net graph with named terminals and MIM-neighbor edges. It
+then computed projected non-supply terminal counts, a tile RUDY proxy, and
+a within-PDK screening score. The generated report is
+`dashboard/static/full-bank-analysis.json`; it includes per-stage timing,
+source run IDs, GDS hashes, and all map values. The batch completed in about
+16 ms on this Mac; exact timing is in the report and varies by run.
+
+**Method:** A non-supply net contributes its tile bounding-box HPWL divided
+by bounding-box tile area and site pitch to each tile in that box. The
+screening score is `HPWL/pitch + 10 × peak RUDY + 2 × peak terminal count`.
+Peripheral MOS and base-MIM locations are projected to the nearest tile on
+the switch-facing bank edge. This deliberately cheap geometry screen omits
+layer capacities, actual PCell pin locations, power/ground routing, obstacles,
+wire resistance/capacitance, and coupling.
+
+**Observed proxy ranking:** Fan ranks first, centered grouped second, and
+exact-centroid third in each PDK. The score does not establish actual
+routability or oscillator performance. The first full-bank routes, grounded
+dummy ties, LVS, PEX, and post-layout transient results are still needed to
+test this hypothesis. No RouteNet or Circuit GNN model was trained or
+evaluated from these placement-only labels.
+
+**Review surface:** `/floorplans/` now displays the two interactive maps,
+candidate ranking, formula, Mac runtime, and an allowlisted read-only source
+viewer for the floorplan skill, taught concepts, lab book, and scripts.
+
 ## Entry format for each taught concept
+
 
 Record the engineer's statement in ordinary language first. Then add:
 

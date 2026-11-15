@@ -22,8 +22,26 @@
         <article id="full-fan-sky130" class="full-fan-card"><h3>SKY130A · 4 × 21 core</h3><p class="fan-status">Loading complete Mac placement…</p><div class="fan-board-scroll"><div class="fan-board" role="img" aria-label="SKY130A full nine-bit fan and dummies"></div></div><div class="fan-inventory"></div><div class="fan-peripherals"></div><button type="button" class="open-full-fan">Open complete GDS + DRC in KLayout</button><p class="fan-path"></p></article>
         <article id="full-fan-gf180" class="full-fan-card"><h3>GF180MCU D · 4 × 17 core</h3><p class="fan-status">Loading complete Mac placement…</p><div class="fan-board-scroll"><div class="fan-board" role="img" aria-label="GF180MCU D full nine-bit fan and dummies"></div></div><div class="fan-inventory"></div><div class="fan-peripherals"></div><button type="button" class="open-full-fan">Open complete GDS + DRC in KLayout</button><p class="fan-path"></p></article>
       </div>
-      <div class="fan-stages" aria-label="Routability research stages"><span class="done">1 · Full placement checked</span><span class="current">2 · Next: feature maps and labels</span><span>3 · RouteNet / Circuit GNN baseline</span><span>4 · Compare predictions with routed evidence</span></div>
+      <div class="fan-stages" aria-label="Routability research stages"><span class="done">1 · Full placement checked</span><span class="done">2 · Graph and feature maps built</span><span class="current">3 · Full-bank routing and labels open</span><span>4 · RouteNet / Circuit GNN baseline open</span><span>5 · Compare with routed evidence open</span></div>
       <p class="scope">Verified on the Mac: all PCells, full dummy perimeter, uniform 14 µm site grid, and zero placement DRC findings in Magic and KLayout. Dummy plates are <strong>not yet tied to ground</strong>; no bank LVS, PEX, or post-layout 512 kHz result exists.</p>
+    </section>
+    <section id="feature-lab" class="feature-lab" aria-label="Full bank graph and feature map analysis">
+      <p class="eyebrow">NATIVE MAC · COMPLETE ONE-STAGE BANK · PLACEMENT SCREENING</p>
+      <h2>Where might routing be hard?</h2>
+      <p>Pick a PDK and saved placement. The maps use all nine trim bits, switches, and base MIM. Hover or select a tile to inspect estimated pin density and routing demand. These are geometry estimates; the bank has not been routed.</p>
+      <div class="feature-controls"><label>Open PDK<select id="feature-process"><option value="sky130">SKY130A</option><option value="gf180">GF180MCU D</option></select></label><label>Placement<select id="feature-variant"><option value="fan">Edge fan</option><option value="clustered">Centered grouped</option><option value="centroid">Exact centroid reference</option></select></label></div>
+      <p id="feature-status" role="status">Loading Mac analysis…</p>
+      <div id="feature-metrics" class="feature-metrics"></div>
+      <div class="feature-maps"><article><h3>Terminal density proxy</h3><p>Non-supply terminal roles per capacitor tile. Switch and base MIM terminals are projected onto the nearest switch-facing tile.</p><div id="pin-map" class="heatmap" role="grid" aria-label="Projected terminal density"></div></article><article><h3>RUDY routing demand proxy</h3><p>Each non-supply net adds HPWL ÷ bounding-box tile area ÷ 14 µm to the tiles in its box. Darker tiles imply higher estimated demand.</p><div id="rudy-map" class="heatmap" role="grid" aria-label="RUDY routing demand proxy"></div></article></div>
+      <p id="feature-tile" class="feature-tile">Select a tile for its values.</p>
+      <h3>Batch comparison within each PDK</h3><div id="feature-comparison"></div>
+      <details class="method-details"><summary>Methods, runtime, and limits</summary><div id="feature-methods"></div></details>
+    </section>
+    <section id="code-skill" class="code-skill" aria-label="Floorplan skill and script source">
+      <p class="eyebrow">READ-ONLY SOURCE · REPRODUCE THE SCREENING PASS</p><h2>Floorplan skill and code</h2>
+      <p>The floorplan skill records the decision path. The Python scripts create the placements, terminal graph, feature maps, and scores. Choose a file to read its actual contents from this checkout.</p>
+      <label>Source file<select id="source-choice"><option value="skill">Floorplan skill · SKILL.md</option><option value="concepts">Taught floorplan concepts</option><option value="feature-builder">Full-bank feature builder</option><option value="placement-builder">Bank placement builder</option><option value="floorplan-rules">Floorplan map rules</option><option value="schematic-builder">Schematic device builder</option><option value="lab-book">Lab book</option></select></label>
+      <p id="source-meta" class="source-meta" role="status">Loading source…</p><pre class="source-code"><code id="source-text"></code></pre>
     </section>
     <section class="toolbar" aria-label="Comparison controls">
       <label>Left revision<select id="left-version"></select></label>

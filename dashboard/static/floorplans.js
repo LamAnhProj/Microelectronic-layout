@@ -231,6 +231,74 @@ for(const process of ['sky130','gf180']){
   }).then(result=>renderRouted(process,result)).catch(error=>{get(`routed-${process}`).querySelector('.routed-status').textContent=`Evidence unavailable: ${error.message}`;});
 }
 
+let featureData=null;
+const formatMs=value=>`${Number(value).toFixed(3)} ms`;
+function renderHeatMap(id,matrix,maximum,candidate,kind){
+  const root=get(id);root.replaceChildren();root.style.setProperty('--feature-cols',candidate.cols);
+  for(let row=matrix.length-1;row>=0;row--){
+    for(let col=0;col<matrix[row].length;col++){
+      const value=matrix[row][col],cell=document.createElement('button');cell.type='button';cell.className='heat-cell';
+      const proportion=maximum?value/maximum:0;
+      cell.style.setProperty('--heat',proportion.toFixed(3));
+      cell.textContent=kind==='pins'?String(value):value.toFixed(1);
+      cell.title=`row ${row}, column ${col}: ${kind==='pins'?`${value} projected terminals`:`${value.toFixed(3)} RUDY proxy`}`;
+      cell.setAttribute('aria-label',cell.title);
+      cell.addEventListener('click',()=>{
+        const pins=candidate.maps.pin_terminal_count[row][col],rudy=candidate.maps.rudy_proxy[row][col];
+        get('feature-tile').textContent=`Tile (${row}, ${col}) · ${pins} projected terminals · RUDY proxy ${rudy.toFixed(3)}. This is a placement estimate, not a routed measurement.`;
+      });
+      root.append(cell);
+    }
+  }
+}
+function renderFeatures(){
+  if(!featureData)return;
+  const process=get('feature-process').value,variant=get('feature-variant').value;
+  const candidate=featureData.candidates.find(item=>item.process===process&&item.variant===variant);
+  if(!candidate)return;
+  const m=candidate.metrics,g=candidate.graph;
+  get('feature-status').textContent=`Native ${featureData.host.system} ${featureData.host.architecture} · ${candidate.placement_drc} placement findings · saved run ${candidate.run_id}`;
+  const metrics=get('feature-metrics');metrics.replaceChildren();
+  for(const [label,value] of [['Devices',g.devices.length],['Terminal edges',g.terminals.length],['Cap adjacency pairs',g.adjacent_cap_pairs.length],['Dummy MIMs',g.dummy_count],['Non-supply HPWL',`${m.non_global_hpwl_um} µm`],['Peak RUDY proxy',m.max_rudy_proxy],['Screening rank',`${candidate.screening_rank_within_pdk} / 3`],['Analysis runtime',formatMs(candidate.runtime_ms.total)]]){
+    const item=document.createElement('div'),valueNode=document.createElement('strong'),labelNode=document.createElement('span');
+    valueNode.textContent=String(value);labelNode.textContent=label;item.append(valueNode,labelNode);metrics.append(item);
+  }
+  renderHeatMap('pin-map',candidate.maps.pin_terminal_count,m.max_pin_terminals_per_tile,candidate,'pins');
+  renderHeatMap('rudy-map',candidate.maps.rudy_proxy,m.max_rudy_proxy,candidate,'rudy');
+  get('feature-tile').textContent='Select a tile for its values.';
+  const comparison=get('feature-comparison');comparison.replaceChildren();
+  const table=document.createElement('table');
+  const head=document.createElement('thead');head.innerHTML='<tr><th>Rank</th><th>Candidate</th><th>HPWL (µm)</th><th>Peak pin count</th><th>Peak RUDY</th><th>Score</th><th>Runtime</th></tr>';table.append(head);
+  const body=document.createElement('tbody');
+  for(const item of featureData.candidates.filter(c=>c.process===process).sort((a,b)=>a.screening_rank_within_pdk-b.screening_rank_within_pdk)){
+    const row=document.createElement('tr');if(item.variant===variant)row.className='selected-row';
+    for(const value of [item.screening_rank_within_pdk,item.variant,item.metrics.non_global_hpwl_um,item.metrics.max_pin_terminals_per_tile,item.metrics.max_rudy_proxy,item.metrics.screening_score,formatMs(item.runtime_ms.total)]){
+      const cell=document.createElement('td');cell.textContent=String(value);row.append(cell);
+    }
+    row.addEventListener('click',()=>{get('feature-variant').value=item.variant;renderFeatures();});body.append(row);
+  }
+  table.append(body);comparison.append(table);
+  const methods=get('feature-methods');methods.replaceChildren();
+  const runtime=document.createElement('p');runtime.textContent=`This six-candidate batch took ${formatMs(featureData.runtime_ms.batch_total)} on ${featureData.host.system} ${featureData.host.architecture}, Python ${featureData.host.python}. For this candidate: artifact validation ${formatMs(candidate.runtime_ms.validate_artifacts)}, graph ${formatMs(candidate.runtime_ms.build_graph)}, maps and score ${formatMs(candidate.runtime_ms.build_features_and_score)}.`;methods.append(runtime);
+  const methodList=document.createElement('ol');for(const line of featureData.methods){const li=document.createElement('li');li.textContent=line;methodList.append(li);}methods.append(methodList);
+  const limit=document.createElement('p');limit.textContent=`Limits: ${featureData.limitations.join(' ')}`;methods.append(limit);
+}
+for(const id of ['feature-process','feature-variant'])get(id).addEventListener('change',renderFeatures);
+fetch('/full-bank-analysis.json').then(async response=>{if(!response.ok)throw Error(`HTTP ${response.status}`);return response.json();}).then(data=>{featureData=data;renderFeatures();}).catch(error=>{get('feature-status').textContent=`Analysis unavailable: ${error.message}`;});
+
+async function showFloorplanSource(){
+  const choice=get('source-choice').value,meta=get('source-meta'),code=get('source-text');
+  meta.textContent='Loading source…';code.textContent='';
+  try{
+    const response=await fetch(`/api/floorplan-source?name=${encodeURIComponent(choice)}`),data=await response.json();
+    if(!response.ok)throw Error(data.error||`HTTP ${response.status}`);
+    if(choice!==get('source-choice').value)return;
+    meta.textContent=`${data.path} · SHA256 ${data.sha256}`;code.textContent=data.text;
+  }catch(error){meta.textContent=`Source unavailable: ${error.message}`;}
+}
+get('source-choice').addEventListener('change',showFloorplanSource);
+showFloorplanSource();
+
 function renderFullFan(process,data){
   const card=get(`full-fan-${process}`),board=card.querySelector('.fan-board');
   const sites=new Map(data.sites.map(item=>[`${item.row},${item.col}`,item]));
