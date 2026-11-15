@@ -11,9 +11,20 @@
   <main>
     <header class="intro">
       <div><p class="eyebrow">CHIP LAB · RCO CAPACITOR BANK</p><h1>Floorplan comparison</h1>
-        <p>Five preserved snapshots, from the first mirrored sketch to the connected-bit revision. Each drawing shows <strong>SKY130A above GF180MCU D</strong>. Choose any two to compare.</p></div>
+        <p>Start with the complete nine-bit fan placement below. Five earlier proposals remain available for comparison and editing farther down the page.</p></div>
       <a class="back" href="/">← Chip Lab</a>
     </header>
+    <section id="full-fan" class="full-fan" aria-label="Complete nine-bit fan placements">
+      <p class="eyebrow">CURRENT FULL BANK · ONE OSCILLATOR STAGE</p>
+      <h2>All nine trim bits, base capacitor, switches, and dummies</h2>
+      <p class="full-fan-explain">Each numbered tile is one real MIM PCell in the saved placement GDS. D is a real dummy MIM PCell. The bottom edge faces the bit switches. These are complete <strong>placements</strong>; capacitor routes and dummy ground ties are still open. The four-capacitor routed coupon farther down is only an isolated flow exercise.</p>
+      <div class="full-fan-grid">
+        <article id="full-fan-sky130" class="full-fan-card"><h3>SKY130A · 4 × 21 core</h3><p class="fan-status">Loading complete Mac placement…</p><div class="fan-board-scroll"><div class="fan-board" role="img" aria-label="SKY130A full nine-bit fan and dummies"></div></div><div class="fan-inventory"></div><div class="fan-peripherals"></div><button type="button" class="open-full-fan">Open complete GDS + DRC in KLayout</button><p class="fan-path"></p></article>
+        <article id="full-fan-gf180" class="full-fan-card"><h3>GF180MCU D · 4 × 17 core</h3><p class="fan-status">Loading complete Mac placement…</p><div class="fan-board-scroll"><div class="fan-board" role="img" aria-label="GF180MCU D full nine-bit fan and dummies"></div></div><div class="fan-inventory"></div><div class="fan-peripherals"></div><button type="button" class="open-full-fan">Open complete GDS + DRC in KLayout</button><p class="fan-path"></p></article>
+      </div>
+      <div class="fan-stages" aria-label="Routability research stages"><span class="done">1 · Full placement checked</span><span class="current">2 · Next: feature maps and labels</span><span>3 · RouteNet / Circuit GNN baseline</span><span>4 · Compare predictions with routed evidence</span></div>
+      <p class="scope">Verified on the Mac: all PCells, full dummy perimeter, uniform 14 µm site grid, and zero placement DRC findings in Magic and KLayout. Dummy plates are <strong>not yet tied to ground</strong>; no bank LVS, PEX, or post-layout 512 kHz result exists.</p>
+    </section>
     <section class="toolbar" aria-label="Comparison controls">
       <label>Left revision<select id="left-version"></select></label>
       <label>Right revision<select id="right-version"></select></label>
@@ -32,7 +43,7 @@
       <p class="scope">One numbered tile represents one trim MIM unit. “D” is a dummy placeholder; the perimeter is fixed. Moves update only a browser-local teaching draft. They do not edit GDS, connect nets, tie dummies to ground, run DRC/LVS/PEX, or predict frequency.</p>
     </section>
     <section class="routed-checkpoint" aria-label="First routed four-unit branch">
-      <div><p class="eyebrow">FIRST ROUTED CHECKPOINT</p><h2>Four capacitors in series</h2><p>SKY130A bit 1 and GF180MCU D bit 2 each use four MIM units in series. These isolated cells test the exact four-unit chain before adding its switch, dummy ring, and the rest of the oscillator.</p></div>
+      <div><p class="eyebrow">ISOLATED ROUTING EXERCISE · 4 OF THE FULL BANK'S MIM UNITS</p><h2>Four capacitors in series</h2><p>SKY130A bit 1 and GF180MCU D bit 2 each use four MIM units in series. These small cells tested the routing and verification flow; <a href="#full-fan">the complete nine-bit fan placements are above</a>.</p></div>
       <div class="routed-grid"><article id="routed-sky130" class="routed-card"><h3>SKY130A · bit 1</h3><p class="routed-status">Loading Mac evidence…</p><div class="layer-toggles"></div><canvas aria-label="SKY130A routed MIM layers"></canvas><div class="routed-metrics"></div><button type="button" class="open-routed" data-process="sky130">Open GDS + DRC in KLayout</button><p class="routed-path"></p></article><article id="routed-gf180" class="routed-card"><h3>GF180MCU D · bit 2</h3><p class="routed-status">Loading Mac evidence…</p><div class="layer-toggles"></div><canvas aria-label="GF180MCU D routed MIM layers"></canvas><div class="routed-metrics"></div><button type="button" class="open-routed" data-process="gf180">Open GDS + DRC in KLayout</button><p class="routed-path"></p></article></div>
       <p class="scope">Colors show M4 bottom plates, M5 routing and terminals, and MIM top plates from the saved GDS. AC is measured at 512 kHz; transient delay uses a 470 kΩ drive and a half-supply crossing. The SKY coupon resolved no wire resistors; GF resolved one. This coupon has no switch, grounded dummies, or full-oscillator result.</p>
     </section>

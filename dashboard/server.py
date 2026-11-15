@@ -79,7 +79,8 @@ DOCS = [
     "docs/learning-plan.md", "docs/storage-r2.md",
     "docs/CONTINUE-SETUP.md", "docs/publish-from-mac.md",
     "knowledge/circuit-reasoning.md", "knowledge/layout-judgment.md",
-    "knowledge/debug-and-evidence.md", "examples/sky130_inverter/README.md",
+    "knowledge/debug-and-evidence.md", "knowledge/routability-paper-digest.md",
+    "examples/sky130_inverter/README.md",
     "examples/gf180_inverter/README.md", "examples/rco/README.md",
 ]
 JOBS: dict[str, dict] = {}
@@ -501,6 +502,118 @@ def open_rco_placement(process: str) -> dict:
     return {"pid": handle.pid, "layout": placement["layout"],
             "pcell_library": "gf180mcu_klayoutapi" if process == "gf180" else None,
             "scope": placement["scope"]}
+
+
+def rco_full_fan_data(process: str) -> dict:
+    """Return the complete verified one-stage fan PCell placement."""
+    if process not in PROCESSES:
+        raise ValueError("Unknown process")
+    expected_bits = ({"0": 8, "1": 4, "2": 2, "3": 1, "4": 2,
+                      "5": 4, "6": 8, "7": 16, "8": 32}
+                     if process == "sky130" else
+                     {"0": 16, "1": 8, "2": 4, "3": 2, "4": 1,
+                      "5": 2, "6": 4, "7": 8, "8": 16})
+    expected_cols = 21 if process == "sky130" else 17
+    base = RUNS / "rco" / "bank_placement" / process / "fan"
+    reports = sorted(base.glob("*/report.json"), key=lambda item: item.stat().st_mtime,
+                     reverse=True)
+    for report_file in reports:
+        if not UUID.fullmatch(report_file.parent.name):
+            continue
+        try:
+            folder = report_file.parent
+            report = json.loads(report_file.read_text())
+            manifest_file = folder / "placement.json"
+            gds = folder / "rco_bank_placement.gds"
+            marker = folder / ("klayout_drc.xml" if process == "sky130" else "full.lyrdb")
+            if (report.get("status") != "placement_drc_clear" or
+                    report.get("process") != process or report.get("variant") != "fan" or
+                    report.get("corridor_probe") or report.get("magic_drc_errors") != 0 or
+                    report.get("klayout_drc_items") != 0 or
+                    report.get("host") != {"system": "Darwin", "arch": "arm64"} or
+                    report.get("gds_instances") != (159 if process == "sky130" else 135) or
+                    not manifest_file.is_file() or not gds.is_file() or not marker.is_file() or
+                    digest(manifest_file) != report.get("placement_manifest_sha256") or
+                    digest(gds) != report.get("gds_sha256") or
+                    digest(marker) != report.get("marker_sha256")):
+                continue
+            manifest = json.loads(manifest_file.read_text())
+            if manifest.get("grid_rows_cols") != [4, expected_cols]:
+                continue
+            entries = manifest["instances"]
+            counts = {kind: sum(item["kind"] == kind for item in entries)
+                      for kind in ("cap", "dummy_cap", "nmos", "pmos")}
+            expected_dummies = 61 if process == "sky130" else 53
+            if counts != {"cap": sum(expected_bits.values()) + 1,
+                          "dummy_cap": expected_dummies, "nmos": 10, "pmos": 10}:
+                continue
+            sites = {}
+            bits = {bit: [] for bit in expected_bits}
+            for item in entries:
+                if item["kind"] not in ("cap", "dummy_cap") or item["name"] == "CBASE0":
+                    continue
+                site = tuple(item["grid_site"])
+                if site in sites or len(site) != 2:
+                    raise ValueError("Fan placement contains overlapping MIM sites")
+                if item["kind"] == "dummy_cap":
+                    if item.get("ground_connection_status") != "not_routed":
+                        raise ValueError("Unexpected dummy connection status")
+                    bit = "D"
+                else:
+                    bit = item["name"].split("_")[1]
+                    bits[bit].append(site)
+                sites[site] = {"row": site[0], "col": site[1], "bit": bit,
+                               "name": item["name"],
+                               "center_um": item["mim_plate_center_um"]}
+            expected_sites = {(row, col) for row in range(-1, 5)
+                              for col in range(-1, expected_cols + 1)}
+            if set(sites) != expected_sites or {bit: len(v) for bit, v in bits.items()} != expected_bits:
+                continue
+            for bit, positions in bits.items():
+                remaining = set(positions)
+                reached = {remaining.pop()}
+                while remaining:
+                    adjacent = {site for site in remaining if any(
+                        abs(site[0] - old[0]) + abs(site[1] - old[1]) == 1
+                        for old in reached)}
+                    if not adjacent:
+                        break
+                    remaining -= adjacent
+                    reached |= adjacent
+                if remaining or not any(row == 0 for row, _ in positions):
+                    raise ValueError(f"Fan bit {bit} lacks connected switch-facing placement")
+            return {"process": process, "run_id": folder.name,
+                    "status": "placement_drc_clear", "rows": 4, "cols": expected_cols,
+                    "pitch_um": manifest["pitch_um_proposal"],
+                    "bit_counts": expected_bits, "counts": counts,
+                    "sites": list(sites.values()),
+                    "peripherals": [{"name": item["name"], "kind": item["kind"],
+                                     "origin_um": item["origin_um"]}
+                                    for item in entries if item["grid_site"] is None],
+                    "gds": str(gds), "report": str(report_file), "marker": str(marker),
+                    "gds_sha256": report["gds_sha256"],
+                    "scope": report["scope"]}
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            continue
+    raise ValueError("No verified complete nine-bit fan placement is available")
+
+
+def open_rco_full_fan(process: str) -> dict:
+    data = rco_full_fan_data(process)
+    executable = shutil.which("klayout")
+    if not executable:
+        raise ValueError("Native KLayout is unavailable")
+    pdk = PROCESSES[process]["pdk"]
+    lyp = PDK_ROOT / pdk / "libs.tech" / "klayout" / "tech" / (
+        "sky130A.lyp" if process == "sky130" else "gf180mcu.lyp")
+    if not lyp.is_file():
+        raise ValueError("PDK layer display file is missing")
+    handle = subprocess.Popen([executable, "-e", "-l", str(lyp), data["gds"],
+                               "-m", data["marker"]], cwd=ROOT,
+                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, start_new_session=True)
+    return {"pid": handle.pid, "layout": data["gds"],
+            "markers": data["marker"], "scope": data["scope"]}
 
 
 def rco_four_mim_data(process: str) -> dict:
@@ -1500,6 +1613,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, rco_data(q["process"], q.get("run")))
             if parsed.path == "/api/rco-four-mim":
                 return self.reply(200, rco_four_mim_data(q["process"]))
+            if parsed.path == "/api/rco-full-fan":
+                return self.reply(200, rco_full_fan_data(q["process"]))
             if parsed.path == "/api/artifact":
                 return self.reply(200, {"name": q["name"], "text":
                     artifact_text(q["process"], q["run"], q["name"])})
@@ -1582,6 +1697,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, open_rco_placement(payload.get("process")))
             if self.path == "/api/open-rco-four-mim":
                 return self.reply(200, open_rco_four_mim(payload.get("process")))
+            if self.path == "/api/open-rco-full-fan":
+                return self.reply(200, open_rco_full_fan(payload.get("process")))
             if self.path == "/api/simulate-schematic":
                 return self.reply(200, simulate_schematic(payload))
             return self.reply(404, {"error": "Unknown action"})

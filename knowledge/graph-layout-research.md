@@ -4,6 +4,10 @@ Research and first Mac probe, 2026-11-14. This is a study plan for the
 open-PDK lab, not a claim that an AI model has been trained or that the full
 capacitor bank has been routed.
 
+After the engineer's correction, [the full-bank paper digest](routability-paper-digest.md)
+separates the complete nine-bit placement from the isolated four-MIM routing
+coupon and records the RouteNet/Circuit GNN methods and reproduction limits.
+
 ## What must be represented
 
 The schematic is a **typed, terminal-aware hypergraph**. Devices and nets are

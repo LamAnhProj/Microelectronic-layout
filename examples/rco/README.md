@@ -321,6 +321,13 @@ and extracting parasitics are the next physical steps before a post-layout
 
 ### First routed four-MIM branch
 
+The [floorplan page](http://127.0.0.1:8765/floorplans/) now shows the **complete
+one-stage fan placement first**: all 77 SKY or 61 GF trim MIMs across bits
+0–8, one base MIM, the 20 switch MOS PCells, and 61 SKY or 53 GF dummy MIMs.
+The complete placement GDS passed Magic and KLayout placement DRC. Its
+signal and dummy-ground routes, LVS, and PEX remain open. The four-MIM GDS
+below is only an isolated route test and must not be read as the full bank.
+
 `uv run --frozen --extra layout python -m examples.rco.route_four_mim sky130`
 and the `gf180` form regenerate a separate series-chain GDS and test it on
 the Mac. SKY bit 1 and GF bit 2 each contain four series MIM units. The runner

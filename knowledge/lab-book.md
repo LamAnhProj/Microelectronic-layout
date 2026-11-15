@@ -613,6 +613,26 @@ future decision quality with a fixed rubric and keep every rejected candidate
 and reason. A learned GNN/CNN model has not been trained; the available RCO
 routed data are too limited to estimate its prediction accuracy honestly.
 
+## 2026-11-14 · Correct the four-MIM scope and show the complete bank
+
+The engineer pointed out that seeing only four MIMs in KLayout hid the actual
+nine-bit fan proposal. The four-MIM GDS is an isolated series-chain routing
+coupon. The complete one-stage fan GDS already contained 77 SKY or 61 GF
+trim MIMs, one base MIM, nine paired bit switches plus one paired main switch,
+and 61 SKY or 53 GF real dummy MIM PCells. We validated the saved GDS,
+manifest counts, complete site inventory, side-adjacent bit groups, bottom-row
+entries, and zero Magic/KLayout placement DRC. The [floorplan page](http://127.0.0.1:8765/floorplans/)
+now presents these complete placements first and opens their actual GDS in
+KLayout. Dummy ties and all signal routes remain open.
+
+The engineer also corrected the work pattern: reason about the whole bank,
+generate and screen full candidate layouts in batches, show current stage and
+cost, and reserve full verification for shortlisted complete candidates. The
+[paper digest](routability-paper-digest.md) records what RouteNet and Circuit
+GNN actually evaluated, what their code/data provide, and how a future RCO
+experiment should differ. These workflow changes are an engineer direction;
+model performance on this analog bank remains an untested agent hypothesis.
+
 ## Entry format for each taught concept
 
 Record the engineer's statement in ordinary language first. Then add:

@@ -230,3 +230,57 @@ for(const process of ['sky130','gf180']){
     const result=await response.json();if(!response.ok)throw Error(result.error||`HTTP ${response.status}`);return result;
   }).then(result=>renderRouted(process,result)).catch(error=>{get(`routed-${process}`).querySelector('.routed-status').textContent=`Evidence unavailable: ${error.message}`;});
 }
+
+function renderFullFan(process,data){
+  const card=get(`full-fan-${process}`),board=card.querySelector('.fan-board');
+  const sites=new Map(data.sites.map(item=>[`${item.row},${item.col}`,item]));
+  board.style.setProperty('--columns',data.cols+2);
+  for(let row=data.rows;row>=-1;row--){
+    for(let col=-1;col<=data.cols;col++){
+      const item=sites.get(`${row},${col}`);
+      if(!item)throw Error(`Missing MIM at site ${row},${col}`);
+      const tile=document.createElement('span');tile.className=`fan-tile ${item.bit==='D'?'dummy':''}`;
+      tile.textContent=item.bit;tile.title=`${item.name} · site (${row}, ${col}) · MIM center ${item.center_um.join(', ')} µm`;
+      tile.style.setProperty('--tile-color',item.bit==='D'?'#394357':bitColors[Number(item.bit)]);
+      board.append(tile);
+    }
+  }
+  card.querySelector('.fan-status').textContent=`Verified Mac placement · ${data.counts.cap-1} trim MIMs · ${data.counts.dummy_cap} dummy MIMs · Magic/KLayout DRC 0/0`;
+  const inventory=card.querySelector('.fan-inventory');
+  for(let bit=0;bit<9;bit++){
+    const chip=document.createElement('span');chip.className='fan-bit';chip.style.setProperty('--tile-color',bitColors[bit]);
+    chip.textContent=`bit ${bit}: ${data.bit_counts[String(bit)]}`;inventory.append(chip);
+  }
+  for(const label of [`D: ${data.counts.dummy_cap}`,`base: 1`,`switch MOS: ${data.counts.nmos+data.counts.pmos}`]){
+    const chip=document.createElement('span');chip.textContent=label;inventory.append(chip);
+  }
+  const peripherals=card.querySelector('.fan-peripherals');
+  const base=data.peripherals.find(item=>item.name==='CBASE0');
+  const baseLine=document.createElement('p');baseLine.textContent=`Base MIM CBASE0 sits outside the grid at (${base.origin_um.join(', ')}) µm.`;
+  peripherals.append(baseLine);
+  const switchLine=document.createElement('p');switchLine.textContent='Switch placement beneath the bank · paired NMOS at y=30 µm and PMOS at y=95 µm:';
+  peripherals.append(switchLine);
+  const strip=document.createElement('div');strip.className='fan-switch-strip';
+  for(const item of data.peripherals.filter(item=>item.kind==='nmos').sort((a,b)=>a.origin_um[0]-b.origin_um[0])){
+    const mate=data.peripherals.find(other=>other.name===item.name.replace('_N','_P'));
+    if(!mate)throw Error(`Missing PMOS for ${item.name}`);
+    const chip=document.createElement('span');chip.textContent=`${item.name.replace('_N','')} · x=${item.origin_um[0]} µm`;
+    chip.title=`${item.name}: (${item.origin_um.join(', ')}) µm; ${mate.name}: (${mate.origin_um.join(', ')}) µm`;
+    strip.append(chip);
+  }
+  peripherals.append(strip);
+  card.querySelector('.fan-path').textContent=`Saved GDS · ${data.gds} · SHA-256 ${data.gds_sha256}`;
+  card.querySelector('.open-full-fan').addEventListener('click',async()=>{
+    try{
+      const overview=await fetch('/api/overview').then(response=>response.json());
+      const response=await fetch('/api/open-rco-full-fan',{method:'POST',headers:{'Content-Type':'application/json','X-Lab-Token':overview.token},body:JSON.stringify({process})});
+      const opened=await response.json();if(!response.ok)throw Error(opened.error||`HTTP ${response.status}`);
+      card.querySelector('.fan-path').textContent=`Opened complete fan GDS in KLayout · ${opened.layout} · DRC markers ${opened.markers}`;
+    }catch(error){card.querySelector('.fan-path').textContent=`Could not open KLayout: ${error.message}`;}
+  });
+}
+for(const process of ['sky130','gf180']){
+  fetch(`/api/rco-full-fan?process=${process}`).then(async response=>{
+    const result=await response.json();if(!response.ok)throw Error(result.error||`HTTP ${response.status}`);return result;
+  }).then(result=>renderFullFan(process,result)).catch(error=>{get(`full-fan-${process}`).querySelector('.fan-status').textContent=`Complete placement unavailable: ${error.message}`;});
+}

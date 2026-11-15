@@ -82,6 +82,15 @@ placement is unrouted; connected-layout LVS, PEX, and post-layout frequency
 checks remain open.
 
 The RCO page links to the [floorplan comparison](http://127.0.0.1:8765/floorplans/).
+At the top, the **complete one-stage nine-bit fan placement** for each PDK
+shows every trim MIM and real dummy PCell, per-bit counts, the separate base
+MIM and paired switch positions, and the saved Mac placement DRC status.
+Its KLayout button opens the complete PDK GDS and marker database. These
+placements have no capacitor or dummy ground routes yet; the four-MIM
+checkpoint lower on the page is an isolated routing exercise. A stage strip
+shows what is complete and what remains for the routability study. See the
+[paper digest](../knowledge/routability-paper-digest.md) for the RouteNet and
+Circuit GNN adaptation plan.
 Its five saved revisions include 18 editable one-stage bank panels across the
 two PDKs. In the placement sandbox, choose a revision and panel, then click or
 drag numbered MIM units between interior sites. **Start empty** turns it into
